@@ -48,10 +48,10 @@ python run_app.py
 ## 🧪 Pruebas Automatizadas y Calidad
 
 ```powershell
-# Ejecutar las 54 pruebas unitarias, de integración, E2E y de reproducción TDD
+# Ejecutar las 70 pruebas unitarias, de integración, E2E y de reproducción TDD
 pytest -v
 
-# Cobertura de código (92%)
+# Cobertura de código (93%)
 pytest -v --cov=src tests/
 
 # Análisis estático de tipos estricto (0 errores en 19 archivos)

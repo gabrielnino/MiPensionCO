@@ -362,6 +362,13 @@
       .container { max-width: 100%; margin: 0; padding: 0; }
       .card { border: none; box-shadow: none; padding: 0; margin-bottom: 2rem; }
     }
+    .badge-extracted { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-notfound { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-review { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-user { background-color: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-declared { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+    .date-hint-es { font-size: 0.78rem; color: #334155; margin-top: 3px; font-style: italic; min-height: 1.1rem; }
   </style>
 </head>
 <body>
@@ -369,7 +376,7 @@
   <header>
     <div class="brand">
       <h1>🇨🇴 MiPensiónCO</h1>
-      <p>Simulador Oficial Local de Pensión de Vejez — Régimen de Transición (Ley 100 de 1993)</p>
+      <p>Simulador local informativo de Pensión de Vejez — Régimen de Transición (Ley 100 de 1993)</p>
     </div>
     <div class="header-actions">
       <button class="btn btn-light" onclick="openAuditModal()">🔍 Auditoría de la Simulación</button>
@@ -425,46 +432,164 @@
     <!-- STEP 2: REVISION Y CORRECCION -->
     <div class="step-panel" id="step-panel-2" style="display:none;">
       <div class="card">
-        <div class="card-title">Revisión de Datos Extraídos y Declaraciones</div>
+        <div class="card-title">Revisión de Información y Confirmación de Datos</div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-          Verifique que los metadatos y semanas reconocidas coincidan con su documento. Si existen periodos faltantes no certificados, declárelos aquí.
+          Revise los valores extraídos del PDF y complete únicamente aquellos no informados o ambiguos. Cada campo indica su origen y estado de validación.
+        </p>
+
+        <!-- GROUP 1: DATOS EXTRAIDOS DEL REPORTE -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> Revisa los datos de tu reporte
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Nacimiento:</label>
+              <span id="badge-fecha-nac" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-nac" onchange="onFieldUserChange('fecha-nac')">
+            <div class="date-hint-es" id="rev-fecha-nac-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Estado de Afiliación:</label>
+              <span id="badge-estado-afil" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <select class="form-control" id="rev-estado-afil" onchange="onFieldUserChange('estado-afil')">
+              <option value="ACTIVO">Activo Cotizante</option>
+              <option value="INACTIVO">Inactivo</option>
+              <option value="PENSIONADO">Pensionado</option>
+              <option value="DESCONOCIDO">Desconocido</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Afiliación Informada:</label>
+              <span id="badge-fecha-afil" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-afil" onchange="onFieldUserChange('fecha-afil')">
+            <div class="date-hint-es" id="rev-fecha-afil-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Actualización del Reporte (Documental):</label>
+              <span id="badge-fecha-corte" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-corte" onchange="onFieldUserChange('fecha-corte')">
+            <div class="date-hint-es" id="rev-fecha-corte-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Expedición del Certificado:</label>
+              <span id="badge-fecha-expedicion" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-expedicion" onchange="onFieldUserChange('fecha-expedicion')">
+            <div class="date-hint-es" id="rev-fecha-expedicion-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Total Semanas Reconocidas en Resumen:</label>
+              <span id="badge-semanas-resumen" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="number" step="0.01" class="form-control" id="rev-semanas-resumen" onchange="onFieldUserChange('semanas-resumen')">
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Último Período Cotizado Detectado:</label>
+              <span id="badge-ultimo-periodo" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-ultimo-periodo" onchange="onFieldUserChange('ultimo-periodo')">
+            <div class="date-hint-es" id="rev-ultimo-periodo-es"></div>
+          </div>
+        </div>
+
+        <!-- GROUP 2: DATOS QUE DEBEN PREGUNTARSE / VERIFICARSE -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #b45309; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️</span> Completa la información que falta o requiere verificación
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Por mandato legal, la categoría pensional no se deduce del nombre o cédula. Indique su categoría y el estado de aportes posteriores o faltantes.
         </p>
 
         <div class="form-grid">
           <div class="form-group">
-            <label>Fecha de Nacimiento:</label>
-            <input type="date" class="form-control" id="rev-fecha-nac">
-          </div>
-          <div class="form-group">
-            <label>Sexo / Categoría de Pensión:</label>
-            <select class="form-control" id="rev-sexo">
-              <option value="">Seleccione...</option>
-              <option value="FEMENINO">Femenino (57 años / 750 semanas C-264)</option>
-              <option value="MASCULINO">Masculino (62 años / 900 semanas C-264)</option>
+            <div class="field-header">
+              <label style="color: #b45309; font-weight: 700;">Categoría para Requisitos Pensionales (Sexo Jurídico): *</label>
+              <span id="badge-sexo" class="badge-notfound">No encontrado</span>
+            </div>
+            <select class="form-control" id="rev-sexo" onchange="onFieldUserChange('sexo')">
+              <option value="">-- Seleccione categoría pensional --</option>
+              <option value="FEMENINO">Femenino (Mujer: 57 años / 750 semanas C-264)</option>
+              <option value="MASCULINO">Masculino (Hombre: 62 años / 900 semanas C-264)</option>
             </select>
           </div>
+
           <div class="form-group">
-            <label>Semanas Resumen Colpensiones:</label>
-            <input type="number" step="0.01" class="form-control" id="rev-semanas-resumen">
+            <div class="field-header">
+              <label>Semanas de Alto Riesgo (Dec. 2090/2003):</label>
+              <span id="badge-alto-riesgo" class="badge-notfound">No informado</span>
+            </div>
+            <input type="number" step="0.01" class="form-control" id="rev-alto-riesgo" placeholder="0 si no cotizó alto riesgo" onchange="onFieldUserChange('alto-riesgo')">
           </div>
+
           <div class="form-group">
-            <label>Fecha de Expedición / Actualización:</label>
-            <input type="date" class="form-control" id="rev-fecha-corte">
+            <div class="field-header">
+              <label>¿Aportes posteriores a la fecha del reporte?:</label>
+              <span id="badge-aportes-posteriores" class="badge-declared">Declaración</span>
+            </div>
+            <select class="form-control" id="rev-aportes-posteriores" onchange="onFieldUserChange('aportes-posteriores')">
+              <option value="SIN_APORTES">No hubo aportes posteriores (historia al día)</option>
+              <option value="CON_APORTES">Hubo aportes y se aportará información o soporte</option>
+              <option value="DESCONOCIDO">Se desconoce si hubo aportes</option>
+            </select>
           </div>
+
           <div class="form-group">
-            <label>Semanas de Alto Riesgo (Dec. 2090/2003):</label>
-            <input type="number" step="0.01" class="form-control" id="rev-alto-riesgo" value="0">
-          </div>
-          <div class="form-group">
-            <label>¿Existen periodos o semanas no certificadas?:</label>
-            <select class="form-control" id="rev-faltantes">
-              <option value="false">No, la historia está completa</option>
-              <option value="true">Sí, hay períodos faltantes por reclamar</option>
+            <div class="field-header">
+              <label>¿Existen períodos o semanas no certificadas?:</label>
+              <span id="badge-faltantes" class="badge-declared">Declaración</span>
+            </div>
+            <select class="form-control" id="rev-faltantes" onchange="onFieldUserChange('faltantes')">
+              <option value="false">No, no se identifican períodos faltantes</option>
+              <option value="true">Sí, hay períodos laborados por reclamar</option>
             </select>
           </div>
         </div>
 
-        <div class="card-title" style="font-size: 1rem; margin-top: 1.5rem;">Detalle de Períodos de Cotización Detectados</div>
+        <!-- TABLE 1: RESUMEN DE SEMANAS COTIZADAS POR EMPLEADOR -->
+        <div id="section-resumen-empleador" style="display:none; margin-top: 1.5rem;">
+          <div class="card-title" style="font-size: 1rem; margin-bottom: 0.25rem;">Resumen Documental de Semanas por Empleador</div>
+          <div id="banner-resumen-only" class="alert alert-info" style="display:none; font-size: 0.85rem; margin-bottom: 0.75rem;">
+            ℹ️ <strong>Resumen por Empleador Extraído:</strong> Se extrajo la tabla consolidada por aportante. El reporte no incluye la relación mensual detallada (IBC histórico); para proyectar mesada en la simulación se podrán ingresar salarios estimados.
+          </div>
+          <div class="table-container">
+            <table id="table-resumen-empleadores">
+              <thead>
+                <tr>
+                  <th>NIT / Identificación</th>
+                  <th>Nombre o Razón Social</th>
+                  <th>Desde</th>
+                  <th>Hasta</th>
+                  <th>Último Salario</th>
+                  <th>Semanas</th>
+                  <th>Licencias</th>
+                  <th>Simultaneidad</th>
+                  <th>Total Semanas</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TABLE 2: DETALLE DE PERIODOS DE COTIZACION DETECTADOS -->
+        <div class="card-title" style="font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.25rem;">Detalle de Períodos de Cotización Detectados (IBC Mensual)</div>
         <div class="table-container">
           <table id="table-registros">
             <thead>
@@ -752,57 +877,204 @@
       document.getElementById('pdf-password-input').value = '';
     }
 
+    function formatDateSpanish(isoStr) {
+      if (!isoStr) return '';
+      const parts = isoStr.split('-');
+      if (parts.length !== 3) return isoStr;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const months = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+      ];
+      if (m < 1 || m > 12) return isoStr;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d)} de ${months[m - 1]} de ${y} (${pad(d)}/${pad(m)}/${y})`;
+    }
+
+    function setFieldBadge(fieldId, status, tooltip) {
+      const badgeEl = document.getElementById('badge-' + fieldId);
+      if (!badgeEl) return;
+      badgeEl.title = tooltip || '';
+      if (status === 'EXTRAIDO_PDF') {
+        badgeEl.className = 'badge-extracted';
+        badgeEl.textContent = 'Extraído del PDF';
+      } else if (status === 'NO_ENCONTRADO') {
+        badgeEl.className = 'badge-notfound';
+        badgeEl.textContent = 'No encontrado';
+      } else if (status === 'REQUIERE_REVISION') {
+        badgeEl.className = 'badge-review';
+        badgeEl.textContent = 'Requiere revisión';
+      } else if (status === 'CORREGIDO_USUARIO') {
+        badgeEl.className = 'badge-user';
+        badgeEl.textContent = 'Corregido por el usuario';
+      } else if (status === 'DECLARADO_USUARIO') {
+        badgeEl.className = 'badge-declared';
+        badgeEl.textContent = 'Declarado por el usuario';
+      }
+    }
+
+    function onFieldUserChange(fieldId) {
+      setFieldBadge(fieldId, 'CORREGIDO_USUARIO', 'Modificado manualmente por el usuario');
+      if (fieldId === 'fecha-nac') {
+        document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-nac').value);
+      } else if (fieldId === 'fecha-corte') {
+        document.getElementById('rev-fecha-corte-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-corte').value);
+      } else if (fieldId === 'fecha-afil') {
+        document.getElementById('rev-fecha-afil-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-afil').value);
+      } else if (fieldId === 'fecha-expedicion') {
+        document.getElementById('rev-fecha-expedicion-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-expedicion').value);
+      } else if (fieldId === 'ultimo-periodo') {
+        document.getElementById('rev-ultimo-periodo-es').innerText = formatDateSpanish(document.getElementById('rev-ultimo-periodo').value);
+      }
+    }
+
     // SAFE DOM population to eliminate XSS (Finding 2.9)
     function populateReviewScreen(h) {
       document.getElementById('rev-fecha-nac').value = h.fecha_nacimiento || '';
-      document.getElementById('rev-sexo').value = h.sexo || '';
-      document.getElementById('rev-semanas-resumen').value = h.semanas_resumen_colpensiones || 0;
+      document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(h.fecha_nacimiento);
+
+      document.getElementById('rev-estado-afil').value = h.estado_afiliacion || 'ACTIVO';
+
+      document.getElementById('rev-fecha-afil').value = h.fecha_afiliacion_colpensiones || '';
+      document.getElementById('rev-fecha-afil-es').innerText = formatDateSpanish(h.fecha_afiliacion_colpensiones);
+
       document.getElementById('rev-fecha-corte').value = h.fecha_actualizacion_reporte || '';
-      document.getElementById('rev-alto-riesgo').value = h.semanas_alto_riesgo || 0;
+      document.getElementById('rev-fecha-corte-es').innerText = formatDateSpanish(h.fecha_actualizacion_reporte);
+
+      document.getElementById('rev-fecha-expedicion').value = h.fecha_expedicion_reporte || '';
+      document.getElementById('rev-fecha-expedicion-es').innerText = formatDateSpanish(h.fecha_expedicion_reporte);
+
+      document.getElementById('rev-semanas-resumen').value = h.semanas_resumen_colpensiones || 0;
+
+      document.getElementById('rev-ultimo-periodo').value = h.ultimo_periodo_cotizado || '';
+      document.getElementById('rev-ultimo-periodo-es').innerText = formatDateSpanish(h.ultimo_periodo_cotizado);
+
+      // Section 2: Missing or user-verified fields
+      document.getElementById('rev-sexo').value = h.sexo || '';
+
+      if (h.semanas_alto_riesgo !== null && h.semanas_alto_riesgo !== undefined) {
+        document.getElementById('rev-alto-riesgo').value = h.semanas_alto_riesgo;
+        setFieldBadge('alto-riesgo', 'EXTRAIDO_PDF', 'Informado en el reporte');
+      } else {
+        document.getElementById('rev-alto-riesgo').value = '';
+        setFieldBadge('alto-riesgo', 'NO_ENCONTRADO', 'No informado en el reporte. Ingrese 0 si no cotizó alto riesgo.');
+      }
+
+      document.getElementById('rev-aportes-posteriores').value = h.aportes_posteriores_estado || 'SIN_APORTES';
       document.getElementById('rev-faltantes').value = h.periodos_desconocidos_o_faltantes ? "true" : "false";
 
+      // Apply initial badges based on presence
+      setFieldBadge('fecha-nac', h.fecha_nacimiento ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('estado-afil', h.estado_afiliacion !== 'DESCONOCIDO' ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-afil', h.fecha_afiliacion_colpensiones ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-corte', h.fecha_actualizacion_reporte ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-expedicion', h.fecha_expedicion_reporte ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('semanas-resumen', h.semanas_resumen_colpensiones > 0 ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('ultimo-periodo', h.ultimo_periodo_cotizado ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('sexo', h.sexo ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+
+      // Populate Summary Table if present
+      const resSec = document.getElementById('section-resumen-empleador');
+      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+      resTbody.innerHTML = '';
+      const summaryList = h.resumen_empleadores || [];
+      if (summaryList.length > 0) {
+        resSec.style.display = 'block';
+        summaryList.forEach(r => {
+          const tr = document.createElement('tr');
+          const tdNit = document.createElement('td'); tdNit.textContent = r.nit || '-';
+          const tdNom = document.createElement('td'); tdNom.textContent = r.nombre_aportante || 'EMPLEADOR';
+          const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
+          const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
+          const tdSal = document.createElement('td'); tdSal.textContent = '$' + Number(r.ultimo_salario || 0).toLocaleString('es-CO');
+          const tdSem = document.createElement('td'); tdSem.textContent = Number(r.semanas || 0).toFixed(2);
+          const tdLic = document.createElement('td'); tdLic.textContent = Number(r.licencias || 0).toFixed(2);
+          const tdSim = document.createElement('td'); tdSim.textContent = Number(r.simultaneidad || 0).toFixed(2);
+          const tdTot = document.createElement('td'); tdTot.textContent = Number(r.total_semanas || 0).toFixed(2);
+          tdTot.style.fontWeight = '700';
+
+          tr.append(tdNit, tdNom, tdIni, tdFin, tdSal, tdSem, tdLic, tdSim, tdTot);
+          resTbody.appendChild(tr);
+        });
+
+        // Banner if detail table is empty
+        const bannerResumen = document.getElementById('banner-resumen-only');
+        if (!h.registros || h.registros.length === 0) {
+          bannerResumen.style.display = 'block';
+        } else {
+          bannerResumen.style.display = 'none';
+        }
+      } else {
+        resSec.style.display = 'none';
+      }
+
+      // Populate Detail Table
       const tbody = document.querySelector('#table-registros tbody');
       tbody.innerHTML = '';
-      (h.registros || []).forEach(r => {
-        const tr = document.createElement('tr');
+      const recordsList = h.registros || [];
+      if (recordsList.length === 0) {
+        const trEmpty = document.createElement('tr');
+        const tdEmpty = document.createElement('td');
+        tdEmpty.colSpan = 6;
+        tdEmpty.style.textAlign = 'center';
+        tdEmpty.style.padding = '1.5rem';
+        tdEmpty.style.color = 'var(--text-muted)';
+        tdEmpty.textContent = 'No se detectaron registros de cotización mensual detallada en este documento.';
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+      } else {
+        recordsList.forEach(r => {
+          const tr = document.createElement('tr');
+          const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
+          const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
+          const tdDias = document.createElement('td'); tdDias.textContent = String(r.dias_cotizados || 0);
+          const tdIbc = document.createElement('td'); tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
+          const tdAportante = document.createElement('td'); tdAportante.textContent = r.aportante || 'EMPLEADOR REPORTADO';
+          const tdOrigen = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-success';
+          badge.textContent = r.origen || 'PDF';
+          tdOrigen.appendChild(badge);
 
-        const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
-        const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
-        const tdDias = document.createElement('td'); tdDias.textContent = String(r.dias_cotizados || 0);
-        const tdIbc = document.createElement('td'); tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
-        
-        // Strict safe textContent for employer name (XSS prevention)
-        const tdAportante = document.createElement('td'); tdAportante.textContent = r.aportante || 'EMPLEADOR REPORTADO';
-        
-        const tdOrigen = document.createElement('td');
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-success';
-        badge.textContent = r.origen || 'PDF';
-        tdOrigen.appendChild(badge);
-
-        tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen);
-        tbody.appendChild(tr);
-      });
+          tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen);
+          tbody.appendChild(tr);
+        });
+      }
     }
 
     async function confirmReviewAndEvaluate() {
       const fNac = document.getElementById('rev-fecha-nac').value;
       const sexo = document.getElementById('rev-sexo').value;
-      if (!fNac || !sexo) {
-        alert("La fecha de nacimiento y la categoría pensional (sexo) son obligatorias para el cálculo jurídico.");
+      if (!fNac) {
+        alert("La fecha de nacimiento es obligatoria para verificar la edad legal y el régimen de transición.");
+        return;
+      }
+      if (!sexo) {
+        alert("Por favor seleccione la Categoría para Requisitos Pensionales (Femenino o Masculino). Por mandato legal no puede inferirse automáticamente.");
         return;
       }
 
+      const altoRiesgoInput = document.getElementById('rev-alto-riesgo').value;
+      const arVal = altoRiesgoInput === "" ? null : parseFloat(altoRiesgoInput) || 0;
+
       laborHistory.fecha_nacimiento = fNac;
       laborHistory.sexo = sexo;
-      laborHistory.semanas_resumen_colpensiones = parseFloat(document.getElementById('rev-semanas-resumen').value) || 0;
+      laborHistory.estado_afiliacion = document.getElementById('rev-estado-afil').value;
+      laborHistory.fecha_afiliacion_colpensiones = document.getElementById('rev-fecha-afil').value || null;
       laborHistory.fecha_actualizacion_reporte = document.getElementById('rev-fecha-corte').value || null;
-      laborHistory.semanas_alto_riesgo = parseFloat(document.getElementById('rev-alto-riesgo').value) || 0;
+      laborHistory.fecha_expedicion_reporte = document.getElementById('rev-fecha-expedicion').value || null;
+      laborHistory.semanas_resumen_colpensiones = parseFloat(document.getElementById('rev-semanas-resumen').value) || 0;
+      laborHistory.ultimo_periodo_cotizado = document.getElementById('rev-ultimo-periodo').value || null;
+      laborHistory.semanas_alto_riesgo = arVal;
+      laborHistory.aportes_posteriores_estado = document.getElementById('rev-aportes-posteriores').value;
       laborHistory.periodos_desconocidos_o_faltantes = document.getElementById('rev-faltantes').value === "true";
 
       // Call transition evaluation API
       try {
-        const resp = await fetch('/api/evaluate-transition', {
+        const q = currentExecutionId ? `?execution_id=${currentExecutionId}` : '';
+        const resp = await fetch(`/api/evaluate-transition${q}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(laborHistory)
@@ -1295,6 +1567,33 @@
         currentExecutionId = null;
         currentAuditData = null;
         simulationResults = [];
+
+        // Clear Step 2 inputs and labels
+        document.getElementById('rev-fecha-nac').value = '';
+        document.getElementById('rev-fecha-nac-es').innerText = '';
+        document.getElementById('rev-estado-afil').value = 'ACTIVO';
+        document.getElementById('rev-fecha-afil').value = '';
+        document.getElementById('rev-fecha-afil-es').innerText = '';
+        document.getElementById('rev-fecha-corte').value = '';
+        document.getElementById('rev-fecha-corte-es').innerText = '';
+        document.getElementById('rev-fecha-expedicion').value = '';
+        document.getElementById('rev-fecha-expedicion-es').innerText = '';
+        document.getElementById('rev-semanas-resumen').value = '';
+        document.getElementById('rev-ultimo-periodo').value = '';
+        document.getElementById('rev-ultimo-periodo-es').innerText = '';
+        document.getElementById('rev-sexo').value = '';
+        document.getElementById('rev-alto-riesgo').value = '';
+        document.getElementById('rev-aportes-posteriores').value = 'SIN_APORTES';
+        document.getElementById('rev-faltantes').value = 'false';
+
+        // Clear tables
+        const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+        if (resTbody) resTbody.innerHTML = '';
+        const regTbody = document.querySelector('#table-registros tbody');
+        if (regTbody) regTbody.innerHTML = '';
+        const resSec = document.getElementById('section-resumen-empleador');
+        if (resSec) resSec.style.display = 'none';
+
         goToStep(1);
         alert("Sesión y datos purgados con éxito.");
       }

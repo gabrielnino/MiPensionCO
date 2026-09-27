@@ -51,6 +51,7 @@ from src.domain.models import (
     EscenarioConfig,
     HistoriaLaboral,
     ProvenanceType,
+    ResumenEmpleadorRecord,
     SexCategory,
 )
 from src.domain.pension_engine import TRANSITION_CUTOFF_DATE_C264, PensionEngine
@@ -96,6 +97,22 @@ class CotizacionRecordDTO(BaseModel):
     fila: int = 1
 
 
+class ResumenEmpleadorRecordDTO(BaseModel):
+    nit: str = ""
+    nombre_aportante: str = ""
+    periodo_inicio: str
+    periodo_fin: str
+    ultimo_salario: float = 0.0
+    ultimo_salario_exacto: str = "0"
+    semanas: float = 0.0
+    licencias: float = 0.0
+    simultaneidad: float = 0.0
+    total_semanas: float = 0.0
+    pagina: int = 1
+    fila: int = 1
+    source_fragment_ids: list[str] = []
+
+
 class HistoriaLaboralDTO(BaseModel):
     cedula_enmascarada: str = "ANON-XXXXX"
     nombre_enmascarado: str = ""
@@ -105,13 +122,16 @@ class HistoriaLaboralDTO(BaseModel):
     fecha_primera_cotizacion: str | None = None
     fecha_expedicion_reporte: str | None = None
     fecha_actualizacion_reporte: str | None = None
-    estado_afiliacion: str = "ACTIVO"
+    ultimo_periodo_cotizado: str | None = None
+    estado_afiliacion: str = "DESCONOCIDO"
     semanas_resumen_colpensiones: float = 0.0
-    semanas_alto_riesgo: float = 0.0
+    semanas_alto_riesgo: float | None = None
     tiempos_publicos: float = 0.0
     es_caso_especial: bool = False
     detalle_caso_especial: str = ""
     periodos_desconocidos_o_faltantes: bool = False
+    aportes_posteriores_estado: str = "DESCONOCIDO"
+    resumen_empleadores: list[ResumenEmpleadorRecordDTO] = []
     registros: list[CotizacionRecordDTO] = []
 
 
@@ -135,9 +155,10 @@ class SimulateRequestDTO(BaseModel):
 class UserCorrectionDTO(BaseModel):
     execution_id: str
     target_field: str
-    original_value: str | None = None
-    corrected_value: str
+    original_value: Any = None
+    corrected_value: Any
     reason: str
+    provenance: str = "DECLARACION_USUARIO"
 
 
 def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
@@ -150,10 +171,12 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         elif val in ("MASCULINO", "HOMBRE", "M"):
             sexo_enum = SexCategory.MASCULINO
 
-    estado_enum = AffiliationStatus.ACTIVO
+    estado_enum = AffiliationStatus.DESCONOCIDO
     if dto.estado_afiliacion:
         st = dto.estado_afiliacion.upper()
-        if "PENSIONADO" in st:
+        if "ACTIVO" in st:
+            estado_enum = AffiliationStatus.ACTIVO
+        elif "PENSIONADO" in st:
             estado_enum = AffiliationStatus.PENSIONADO
         elif "INACTIVO" in st:
             estado_enum = AffiliationStatus.INACTIVO
@@ -191,6 +214,30 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
             )
         )
 
+    resumen_list: list[ResumenEmpleadorRecord] = []
+    for re_dto in dto.resumen_empleadores:
+        try:
+            r_ini = date.fromisoformat(re_dto.periodo_inicio)
+            r_fin = date.fromisoformat(re_dto.periodo_fin)
+        except ValueError:
+            continue
+        resumen_list.append(
+            ResumenEmpleadorRecord(
+                nit=re_dto.nit,
+                nombre_aportante=re_dto.nombre_aportante,
+                periodo_inicio=r_ini,
+                periodo_fin=r_fin,
+                ultimo_salario=Decimal(str(re_dto.ultimo_salario)),
+                semanas=Decimal(str(re_dto.semanas)),
+                licencias=Decimal(str(re_dto.licencias)),
+                simultaneidad=Decimal(str(re_dto.simultaneidad)),
+                total_semanas=Decimal(str(re_dto.total_semanas)),
+                pagina=re_dto.pagina,
+                fila=re_dto.fila,
+                source_fragment_ids=tuple(re_dto.source_fragment_ids),
+            )
+        )
+
     f_nac = date.fromisoformat(dto.fecha_nacimiento) if dto.fecha_nacimiento else None
     f_afil = (
         date.fromisoformat(dto.fecha_afiliacion_colpensiones)
@@ -212,6 +259,17 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         if dto.fecha_actualizacion_reporte
         else None
     )
+    u_per = (
+        date.fromisoformat(dto.ultimo_periodo_cotizado)
+        if dto.ultimo_periodo_cotizado
+        else None
+    )
+
+    ar_dec = (
+        Decimal(str(dto.semanas_alto_riesgo))
+        if dto.semanas_alto_riesgo is not None
+        else None
+    )
 
     return HistoriaLaboral(
         cedula_enmascarada=dto.cedula_enmascarada,
@@ -222,14 +280,17 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         fecha_primera_cotizacion=f_prim,
         fecha_expedicion_reporte=f_exp,
         fecha_actualizacion_reporte=f_act,
+        ultimo_periodo_cotizado=u_per,
         estado_afiliacion=estado_enum,
         semanas_resumen_colpensiones=Decimal(str(dto.semanas_resumen_colpensiones)),
-        semanas_alto_riesgo=Decimal(str(dto.semanas_alto_riesgo)),
+        semanas_alto_riesgo=ar_dec,
         tiempos_publicos=Decimal(str(dto.tiempos_publicos)),
         es_caso_especial=dto.es_caso_especial,
         detalle_caso_especial=dto.detalle_caso_especial,
+        resumen_empleadores=resumen_list,
         registros=records,
         periodos_desconocidos_o_faltantes=dto.periodos_desconocidos_o_faltantes,
+        aportes_posteriores_estado=dto.aportes_posteriores_estado,
     )
 
 
@@ -288,6 +349,19 @@ async def upload_pdf(
 
     # Convert to JSON serializable response
     records_data = [r.to_dict() for r in historia.registros]
+    resumen_data = [r.to_dict() for r in historia.resumen_empleadores]
+
+    audit = AuditService.get_or_create_audit(exec_id)
+    field_statuses = {}
+    for f in audit.detected_fields:
+        field_statuses[f.field_name] = {
+            "status": f.validation_status,
+            "raw_text": f.raw_text,
+            "parsed_value": f.parsed_value,
+            "source_fragments": f.source_fragment_ids,
+            "explanation": f.explanation,
+        }
+
     return JSONResponse(
         content={
             "success": True,
@@ -295,6 +369,7 @@ async def upload_pdf(
                 "execution_id": report.execution_id or exec_id,
                 "pages_processed": report.pages_processed,
                 "records_extracted": report.records_extracted,
+                "summary_records_extracted": len(resumen_data),
                 "warnings": report.warnings,
             },
             "data": {
@@ -316,16 +391,24 @@ async def upload_pdf(
                 "fecha_actualizacion_reporte": historia.fecha_actualizacion_reporte.isoformat()
                 if historia.fecha_actualizacion_reporte
                 else None,
+                "ultimo_periodo_cotizado": historia.ultimo_periodo_cotizado.isoformat()
+                if historia.ultimo_periodo_cotizado
+                else None,
                 "estado_afiliacion": historia.estado_afiliacion.value,
                 "semanas_resumen_colpensiones": float(
                     historia.semanas_resumen_colpensiones
                 ),
-                "semanas_alto_riesgo": float(historia.semanas_alto_riesgo),
+                "semanas_alto_riesgo": float(historia.semanas_alto_riesgo)
+                if historia.semanas_alto_riesgo is not None
+                else None,
                 "tiempos_publicos": float(historia.tiempos_publicos),
                 "es_caso_especial": historia.es_caso_especial,
                 "detalle_caso_especial": historia.detalle_caso_especial,
                 "periodos_desconocidos_o_faltantes": historia.periodos_desconocidos_o_faltantes,
+                "aportes_posteriores_estado": historia.aportes_posteriores_estado,
+                "resumen_empleadores": resumen_data,
                 "registros": records_data,
+                "field_statuses": field_statuses,
             },
         }
     )
@@ -520,20 +603,26 @@ async def get_economic_data() -> JSONResponse:
     return JSONResponse(content={"smlmv": smlmv_list, "ipc": ipc_list})
 
 
+class ResetSessionDTO(BaseModel):
+    execution_id: str | None = None
+    delete_persisted_audit: bool = True
+
+
 @app.post("/api/reset-session")
 async def reset_session(
+    dto: ResetSessionDTO | None = None,
     execution_id: str | None = None,
     delete_persisted_audit: bool = True,
 ) -> JSONResponse:
     """Wipes in-memory session data and removes disk audit files."""
-    if execution_id:
-        validate_execution_id(execution_id)
-    AuditService.purge_session(
-        execution_id=execution_id, purge_disk=delete_persisted_audit
-    )
-    if execution_id:
+    target_id = dto.execution_id if dto and dto.execution_id else execution_id
+    purge_disk = dto.delete_persisted_audit if dto else delete_persisted_audit
+    if target_id:
+        validate_execution_id(target_id)
+    AuditService.purge_session(execution_id=target_id, purge_disk=purge_disk)
+    if target_id:
         AuditService.log_technical(
-            execution_id,
+            target_id,
             AuditStep.EXPORTACION_BORRADO,
             "AuditService",
             0.0,
@@ -545,6 +634,7 @@ async def reset_session(
         )
     return JSONResponse(
         content={
+            "success": True,
             "status": "SESSION_CLEARED",
             "message": "Datos de sesión y auditoría borrados con éxito.",
         }

@@ -81,6 +81,49 @@ class CotizacionRecord:
         }
 
 
+class FieldExtractionStatus(str, Enum):
+    EXTRAIDO_PDF = "EXTRAIDO_PDF"
+    NO_ENCONTRADO = "NO_ENCONTRADO"
+    REQUIERE_REVISION = "REQUIERE_REVISION"
+    CORREGIDO_USUARIO = "CORREGIDO_USUARIO"
+    DECLARADO_USUARIO = "DECLARADO_USUARIO"
+
+
+@dataclass(frozen=True)
+class ResumenEmpleadorRecord:
+    """Documentary summary row per employer from Colpensiones report."""
+
+    nit: str
+    nombre_aportante: str
+    periodo_inicio: date
+    periodo_fin: date
+    ultimo_salario: Decimal
+    semanas: Decimal
+    licencias: Decimal = Decimal(0)
+    simultaneidad: Decimal = Decimal(0)
+    total_semanas: Decimal = Decimal(0)
+    pagina: int = 1
+    fila: int = 1
+    source_fragment_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "nit": self.nit,
+            "nombre_aportante": self.nombre_aportante,
+            "periodo_inicio": self.periodo_inicio.isoformat(),
+            "periodo_fin": self.periodo_fin.isoformat(),
+            "ultimo_salario": float(self.ultimo_salario),
+            "ultimo_salario_exacto": str(self.ultimo_salario),
+            "semanas": float(self.semanas),
+            "licencias": float(self.licencias),
+            "simultaneidad": float(self.simultaneidad),
+            "total_semanas": float(self.total_semanas),
+            "pagina": self.pagina,
+            "fila": self.fila,
+            "source_fragment_ids": list(self.source_fragment_ids),
+        }
+
+
 @dataclass(frozen=True)
 class CorreccionRegistro:
     """Audit log of user-corrected or declared values."""
@@ -104,14 +147,20 @@ class HistoriaLaboral:
     fecha_primera_cotizacion: date | None = None
     fecha_expedicion_reporte: date | None = None
     fecha_actualizacion_reporte: date | None = None
-    estado_afiliacion: AffiliationStatus = AffiliationStatus.ACTIVO
+    ultimo_periodo_cotizado: date | None = None
+    estado_afiliacion: AffiliationStatus = AffiliationStatus.DESCONOCIDO
     semanas_resumen_colpensiones: Decimal = Decimal(0)
-    semanas_alto_riesgo: Decimal = Decimal(0)
+    semanas_alto_riesgo: Decimal | None = None
     tiempos_publicos: Decimal = Decimal(0)
     es_caso_especial: bool = False
     detalle_caso_especial: str = ""
+    resumen_empleadores: list[ResumenEmpleadorRecord] = field(default_factory=list)
     registros: list[CotizacionRecord] = field(default_factory=list)
+    registros_pendientes: list[dict[str, Any]] = field(default_factory=list)
     periodos_desconocidos_o_faltantes: bool = False
+    aportes_posteriores_estado: str = (
+        "DESCONOCIDO"  # "SIN_APORTES" | "CON_APORTES" | "DESCONOCIDO"
+    )
     correcciones: list[CorreccionRegistro] = field(default_factory=list)
 
     def total_dias_cotizados(self) -> int:

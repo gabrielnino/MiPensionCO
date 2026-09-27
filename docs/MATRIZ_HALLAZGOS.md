@@ -37,17 +37,21 @@ Esta matriz documenta de forma completa cada uno de los hallazgos identificados 
 
 ---
 
-## 3. Verificación de Extremo a Extremo (E2E)
+## 3. Hallazgos de Tercera Revisión: Extracción, Precarga y Formulario de Revisión
 
-- **Prueba:** `tests/test_e2e_full_workflow.py::test_full_10_step_e2e_workflow`
-- **Flujo comprobado:**
-  1. Carga de PDF multipágina con marcadores maliciosos HTML.
-  2. Inspección de texto crudo y fragmentos con coordenadas y estado.
-  3. Corrección manual de campo con motivo e invalidación.
-  4. Evaluación jurídica de transición y registro en auditoría.
-  5. Simulación de escenarios con pausas e ingresos contrastados.
-  6. Trazabilidad completa de operaciones matemáticas con serialización decimal exacta.
-  7. Exportación de auditoría completa en JSON y Markdown.
-  8. Guardado local atómico en disco bajo consentimiento explícito (sin guardar el PDF original).
-  9. Purgado de sesión y eliminación del archivo persistido en disco.
-  10. Verificación de ausencia de estado residual en memoria o disco.
+| ID | Componente | Descripción del Defecto Identificado | Causa Raíz Técnica / Jurídica | Corrección Implementada | Prueba Automatizada | Estado |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **3.1** | `src/parser/pdf_reader.py` y UI | La cabecera mostraba `ACTUALIZADO A: 30 agosto 2025`, pero la aplicación mostraba una fecha correspondiente a octubre (`10/30/2025`). | El patrón de fechas solo admitía dígitos numéricos (`DD/MM/YYYY`), omitiendo meses textuales en español. El parser saltaba a la fecha de expedición (octubre) y el navegador en configuración US mostraba `10/30/2025`. | Se implementó `DATE_TEXTUAL_PATTERN` y diccionario de los 12 meses en español (`SPANISH_MONTHS`), normalizando a `date(2025, 8, 30)` con separación estricta entre fecha de actualización y fecha de expedición, más texto legible en español en la UI. | `tests/test_extraction_and_review_form.py::test_extraction_spanish_date_30_agosto_2025` | **RESUELTO** |
+| **3.2** | `src/parser/pdf_reader.py`, `src/domain/models.py` y UI | La tabla "Detalle de Períodos de Cotización Detectados" aparecía vacía cuando el PDF contenía la tabla "RESUMEN DE SEMANAS COTIZADAS POR EMPLEADOR" de páginas 1 a 3. | El parser solo reconocía cotizaciones mensuales con IBC y días (1-31). La tabla de resumen por empleador no contiene IBC histórico sino semanas globales y último salario. | Se modeló `ResumenEmpleadorRecord`, parser dedicado multi-sección, tabla visual propia en el Paso 2 ("Resumen Documental de Semanas por Empleador") y advertencia contextual indicando que el IBC histórico requiere carga de detalle o IBC estimado para proyectar. | `tests/test_extraction_and_review_form.py::test_extraction_multipage_summary_and_detail_tables` y `test_extraction_summary_available_detail_pending` | **RESUELTO** |
+| **3.3** | `src/parser/pdf_reader.py`, `src/domain/models.py` y UI | El formulario precargaba "Hombre" por defecto en Sexo y "0" en Semanas de Alto Riesgo, aún cuando no figuraban en el reporte. | Violación del principio de fidelidad documental: se asumían valores por omisión en lugar de reflejar la verdad del documento y preguntar al usuario. | `sexo` y `semanas_alto_riesgo` son `None` si no están en el PDF. En la UI, el selector de categoría pensional queda sin selección (`-- Seleccione una opción --`) y el campo de alto riesgo queda vacío con badge "No encontrado en el reporte", exigiendo selección explícita del usuario. | `tests/test_extraction_and_review_form.py::test_extraction_no_pension_category_leaves_unselected` y `test_extraction_no_high_risk_state_unknown` | **RESUELTO** |
+| **3.4** | `static/index.html` | La pantalla de revisión mezclaba datos extraídos con campos no verificados, e inducía a error al titularse "Simulador Oficial". | Ausencia de separación visual entre lo documentado y lo pendiente; titulación no representativa de la naturaleza local del aplicativo. | Se retituló a "Simulador local informativo". El Paso 2 se dividió en dos grupos visuales: (1) "📋 Revisa los datos de tu reporte" con badges de origen y fecha textual en español, y (2) "⚠️ Completa la información que falta o requiere verificación" con selectores explícitos. | `tests/test_extraction_and_review_form.py::test_e2e_browser_workflow_preload_correct_confirm` | **RESUELTO** |
+| **3.5** | `src/domain/pension_engine.py` | Confundir el campo "Último Salario" de la tabla de resumen con el IBC histórico de cotización mensual. | "Último Salario" es el salario devengado al retiro con un empleador, no el IBC cotizado mes a mes a lo largo de los años. | Separación estricta de dominios: `ultimo_salario` solo pertenece a `ResumenEmpleadorRecord`. Nunca se transforma en registros de `CotizacionRecord.ibc`. | `tests/test_extraction_and_review_form.py::test_difference_ultimo_salario_vs_historical_ibc` | **RESUELTO** |
+| **3.6** | `static/index.html` y `src/parser/pdf_reader.py` | Carga de un segundo PDF o reinicio de sesión no limpiaba datos anteriores o podía inyectar contenido en el DOM. | Falta de purgado completo de variables en el cliente y riesgo de XSS por contenido no sanitizado. | `resetSession()` limpia todos los campos, badges, mensajes y tablas. Inserción al DOM mediante `textContent` seguro. | `tests/test_extraction_and_review_form.py::test_upload_second_pdf_purges_first_data` y `test_malicious_xss_in_pdf_rendered_as_safe_text` | **RESUELTO** |
+
+---
+
+## 4. Verificación de Extremo a Extremo (E2E)
+
+- **Prueba 1:** `tests/test_e2e_full_workflow.py::test_full_10_step_e2e_workflow` (Flujo de 10 pasos de auditoría de cálculo y documental).
+- **Prueba 2:** `tests/test_extraction_and_review_form.py::test_e2e_browser_workflow_preload_correct_confirm` (Flujo completo: PDF sintético -> precarga -> campos pendientes -> confirmación -> simulación).
+
