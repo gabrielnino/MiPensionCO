@@ -605,14 +605,14 @@ async def get_economic_data() -> JSONResponse:
 
 class ResetSessionDTO(BaseModel):
     execution_id: str | None = None
-    delete_persisted_audit: bool = True
+    delete_persisted_audit: bool = False
 
 
 @app.post("/api/reset-session")
 async def reset_session(
     dto: ResetSessionDTO | None = None,
     execution_id: str | None = None,
-    delete_persisted_audit: bool = True,
+    delete_persisted_audit: bool = False,
 ) -> JSONResponse:
     """Wipes in-memory session data and removes disk audit files."""
     target_id = dto.execution_id if dto and dto.execution_id else execution_id

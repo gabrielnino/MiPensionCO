@@ -686,35 +686,59 @@ class PensionEngine:
         ya_supero_edad = today >= horizon_date
 
         # 1. Accredited documentary and calendar weeks (filtered to horizon_date)
-        semanas_doc = historia.semanas_resumen_colpensiones
-        # Finding F: Filter and clip historical records strictly up to horizon_date
         historical_records_to_horizon = self.clip_records_to_horizon(
             historia.registros, horizon_date
         )
+        doc_records = [
+            r
+            for r in historical_records_to_horizon
+            if r.origen != ProvenanceType.DECLARACION_USUARIO
+        ]
+        decl_records = [
+            r
+            for r in historical_records_to_horizon
+            if r.origen == ProvenanceType.DECLARACION_USUARIO
+        ]
+
+        semanas_doc = (
+            historia.semanas_resumen_colpensiones
+            if historia.semanas_resumen_colpensiones > Decimal(0)
+            else self.compute_calendar_weeks(doc_records)
+        )
+        semanas_declaradas = self.compute_calendar_weeks(decl_records)
         semanas_cal = self.compute_calendar_weeks(historia.registros)
-        diferencia_cal = (semanas_cal - semanas_doc).quantize(Decimal("0.01"))
+        diferencia_cal = (semanas_cal - (semanas_doc + semanas_declaradas)).quantize(
+            Decimal("0.01")
+        )
 
-        # Finding G: Do NOT automatically select max(semanas_doc, semanas_cal)!
         # Evaluate material discrepancy
-        requiere_revision_discrepancia = False
+        # Check if discrepancy alters eligibility threshold
+        semanas_base_total = semanas_doc + semanas_declaradas
         cambia_elegibilidad = (
-            semanas_doc < Decimal(required_weeks) <= semanas_cal
-        ) or (semanas_cal < Decimal(required_weeks) <= semanas_doc)
-        cambia_bloque = int(semanas_doc // 50) != int(semanas_cal // 50)
+            semanas_base_total < Decimal(required_weeks) <= semanas_cal
+        ) or (semanas_cal < Decimal(required_weeks) <= semanas_base_total)
 
-        if abs(diferencia_cal) >= Decimal("1.00") and (
-            cambia_elegibilidad or cambia_bloque
-        ):
-            requiere_revision_discrepancia = True
+        # Check if discrepancy alters 50-week blocks relative to applicable legal requirement
+        # Ley 797 de 2003, Art. 10: additional blocks beyond required_weeks
+        bloques_doc = max(0, int((semanas_base_total - Decimal(required_weeks)) // 50))
+        bloques_cal = max(0, int((semanas_cal - Decimal(required_weeks)) // 50))
+        cambia_bloque = bloques_doc != bloques_cal
+
+        requiere_revision_discrepancia = bool(
+            cambia_elegibilidad
+            or (cambia_bloque and abs(diferencia_cal) >= Decimal("0.01"))
+        )
 
         # Base accredited weeks: Use proven recognized summary if present, else recalculation
-        base_weeks = semanas_doc if semanas_doc > Decimal(0) else semanas_cal
+        base_weeks = (
+            semanas_doc
+            if historia.semanas_resumen_colpensiones > Decimal(0)
+            else self.compute_calendar_weeks(doc_records)
+        )
 
-        # 2. Finding 2.2 & D Fix: Generate hypothetical future contributions
-        # Cannot project into the past as future assumptions (before today / as_of_date)
-        declared_past_records: list[CotizacionRecord] = []
+        # 2. Future contributions strictly after today / evaluation date
+        # NEVER invent past contributions between last contribution and evaluation date!
         projected_future_records: list[CotizacionRecord] = []
-        semanas_declaradas = Decimal(0)
         semanas_proyectadas = Decimal(0)
 
         # Merge overlapping pause intervals (Finding C)
@@ -828,32 +852,9 @@ class PensionEngine:
                     historical_records_to_horizon
                 )
             else:
-                semanas_totales = base_weeks
+                semanas_totales = base_weeks + semanas_declaradas
             semanas_proyectadas = Decimal(0)
         else:
-            last_cot_date = (
-                max([r.periodo_fin for r in historical_records_to_horizon])
-                if historical_records_to_horizon
-                else today
-            )
-            # Declared past contributions between last cot and today
-            if escenario.fecha_inicio_ibc <= today and last_cot_date < today:
-                decl_start = max(
-                    last_cot_date + timedelta(days=1),
-                    escenario.fecha_inicio_ibc,
-                )
-                decl_end = today + timedelta(days=1)
-                declared_past_records = make_span_records(
-                    decl_start,
-                    decl_end,
-                    ProvenanceType.DECLARACION_USUARIO,
-                    "DECLARADO",
-                )
-                total_decl_days = sum(r.dias_cotizados for r in declared_past_records)
-                semanas_declaradas = (Decimal(total_decl_days) / Decimal(7)).quantize(
-                    Decimal("0.01"), rounding=ROUND_FLOOR
-                )
-
             # Strictly future projected contributions
             fut_start = max(
                 today + timedelta(days=1),
@@ -874,15 +875,16 @@ class PensionEngine:
                 base_weeks + semanas_declaradas + semanas_proyectadas
             ).quantize(Decimal("0.01"))
 
-        # Finding G: If Colpensiones summary does not meet required weeks, do NOT grant via recalculation
-        if (
-            semanas_doc > Decimal(0)
-            and semanas_doc < Decimal(required_weeks) <= semanas_cal
-        ):
-            cumple_semanas = False
-            requiere_revision_discrepancia = True
-        else:
-            cumple_semanas = semanas_totales >= Decimal(required_weeks)
+        cumple_semanas = semanas_totales >= Decimal(required_weeks)
+
+        # Single decision of enablement across all engine paths:
+        # Liquidation is enabled ONLY if affiliate meets required weeks, has no unresolved documentary discrepancy,
+        # and has no declared unknown/missing periods.
+        es_liquidable = (
+            cumple_semanas
+            and not requiere_revision_discrepancia
+            and not historia.periodos_desconocidos_o_faltantes
+        )
 
         deficit = max(Decimal(0), Decimal(required_weeks) - semanas_totales).quantize(
             Decimal("0.01")
@@ -897,7 +899,7 @@ class PensionEngine:
         desglose: list[str] = [
             f"Horizonte ordinario: {horizon_date.isoformat()} (cumplimiento de {legal_age} años).",
             f"Requisito legal aplicable ({horizon_date.year}): {required_weeks} semanas.",
-            f"Semanas reconocidas documentales: {semanas_doc}. Semanas recalculadas por días calendario: {semanas_cal}.",
+            f"Semanas reconocidas documentales: {semanas_doc}. Semanas declaradas por el usuario: {semanas_declaradas}. Semanas recalculadas por días calendario: {semanas_cal}.",
         ]
 
         if ya_supero_edad:
@@ -911,21 +913,54 @@ class PensionEngine:
 
         desglose.append(f"Total semanas a la edad legal: {semanas_totales}.")
 
-        # If deficit: strict product rule, no payable pension
-        if not cumple_semanas:
-            desglose.append(
-                f"DÉFICIT PENSIONAL: Faltan {deficit} semanas para reunir el requisito legal a la edad ordinaria."
-            )
-            desglose.append(
-                "REGLA ESTRICTA DE PRODUCTO: No se calcula una mesada pagadera ni se proyectan aportes posteriores a la edad legal."
-            )
-            advertencia = "No cumple con las semanas mínimas requeridas a la edad legal ordinaria. No se reconoce mesada pensional."
+        scenario_inputs: dict[str, Any] = {
+            "ibc_futuro": str(escenario.ibc_futuro_inicial),
+            "ibc_futuro_nominal": str(escenario.ibc_futuro_inicial),
+            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
+            "fecha_inicio_ibc": escenario.fecha_inicio_ibc.isoformat(),
+            "crecimiento": str(escenario.crecimiento_anual_nominal),
+            "crecimiento_anual_nominal": str(escenario.crecimiento_anual_nominal),
+            "semanas_proyectadas": str(semanas_proyectadas),
+            "motivo_terminacion_o_pausa_aportes": (
+                "Superó edad legal ordinaria previa a la simulación; no se proyectan aportes hacia el pasado."
+                if ya_supero_edad
+                else "Llegada a la fecha de cumplimiento de edad legal ordinaria (horizonte fijo de retiro)."
+            ),
+            "supuestos_economicos": {
+                "inflacion_anual_proyeccion": str(escenario.supuesto_inflacion),
+                "crecimiento_anual_smlmv": str(escenario.supuesto_crecimiento_smlmv),
+            },
+        }
+
+        # If not enabled for liquidation (deficit, discrepancy, or unknown periods):
+        if not es_liquidable:
             if requiere_revision_discrepancia:
                 advertencia = (
                     f"DISCREPANCIA DOCUMENTAL: El resumen de semanas ({semanas_doc}) difiere del recálculo de períodos ({semanas_cal}) "
-                    f"y no alcanza el umbral legal de {required_weeks}. Se requiere revisión documental previa."
+                    f"con información salarial insuficiente para liquidar. "
+                    f"La mesada no puede liquidarse automáticamente mientras exista una discrepancia pendiente de revisión documental."
                 )
                 desglose.append(advertencia)
+                blocking_code = "DISCREPANCIA_DOCUMENTAL_SEMANAS"
+                blocking_limit = "BLOQUEADO_POR_DISCREPANCIA"
+            elif historia.periodos_desconocidos_o_faltantes:
+                advertencia = (
+                    "Se declararon períodos faltantes o desconocidos en la historia laboral. "
+                    "Las conclusiones pensionales definitivas quedan bloqueadas hasta verificar los períodos pendientes."
+                )
+                desglose.append(advertencia)
+                blocking_code = "PERIODOS_HISTORICOS_DESCONOCIDOS"
+                blocking_limit = "BLOQUEADO_POR_PERIODOS_DESCONOCIDOS"
+            else:
+                desglose.append(
+                    f"DÉFICIT PENSIONAL: Faltan {deficit} semanas para reunir el requisito legal a la edad ordinaria."
+                )
+                desglose.append(
+                    "REGLA ESTRICTA DE PRODUCTO: No se calcula una mesada pagadera ni se proyectan aportes posteriores a la edad legal."
+                )
+                advertencia = "No cumple con las semanas mínimas requeridas a la edad legal ordinaria. No se reconoce mesada pensional."
+                blocking_code = "DEFICIT_SEMANAS_A_LA_EDAD_LEGAL"
+                blocking_limit = "NINGUNO"
 
             if execution_id:
                 AuditService.add_scenario_audit(
@@ -935,14 +970,11 @@ class PensionEngine:
                         scenario_name=escenario.nombre,
                         fixed_horizon_date=horizon_date.isoformat(),
                         legal_retirement_age=legal_age,
-                        inputs={
-                            "ibc_futuro": str(escenario.ibc_futuro_inicial),
-                            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
-                            "crecimiento": str(escenario.crecimiento_anual_nominal),
-                        },
+                        inputs=scenario_inputs,
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
+                            "declaradas": str(semanas_declaradas),
                             "calendario": str(semanas_cal),
                             "proyectadas": str(semanas_proyectadas),
                             "totales": str(semanas_totales),
@@ -950,7 +982,7 @@ class PensionEngine:
                             "deficit": str(deficit),
                         },
                         effective_contributions_selected=[],
-                        ibl_method_chosen="NO_APLICA_DEFICIT",
+                        ibl_method_chosen="NO_APLICA_BLOQUEADO",
                         ibl_final=None,
                         smlmv_ref=str(smlmv_ref),
                         s_factor=None,
@@ -958,9 +990,7 @@ class PensionEngine:
                         additional_weeks_blocks=None,
                         replacement_rate_final_pct=None,
                         gross_pension=None,
-                        limit_applied="BLOQUEADO_POR_DISCREPANCIA"
-                        if requiere_revision_discrepancia
-                        else "NINGUNO",
+                        limit_applied=blocking_limit,
                         health_discount_pct=None,
                         health_discount_amount=None,
                         fsp_discount_pct=None,
@@ -969,9 +999,7 @@ class PensionEngine:
                         real_purchasing_power_cop=None,
                         smlmv_multiples=None,
                         is_blocked=True,
-                        blocking_reason="DISCREPANCIA_DOCUMENTAL_SEMANAS"
-                        if requiere_revision_discrepancia
-                        else "DEFICIT_SEMANAS_A_LA_EDAD_LEGAL",
+                        blocking_reason=blocking_code,
                         step_by_step_operations=desglose,
                     ),
                 )
@@ -981,10 +1009,12 @@ class PensionEngine:
                     "PensionEngine",
                     0.0,
                     AuditSeverity.INFO,
-                    EventCode.DEFICIT_SEMANAS_HORIZONTE,
+                    EventCode.DEFICIT_SEMANAS_HORIZONTE
+                    if not cumple_semanas
+                    else EventCode.DISCREPANCIA_RESUMEN_DETALLE,
                     "BLOQUEADO",
-                    "Déficit de semanas a la edad legal ordinaria",
-                    "Continuar cotizando hasta alcanzar las semanas requeridas",
+                    blocking_code,
+                    "Revisar evidencia documental o completar requisitos",
                 )
 
             return SimulationResult(
@@ -999,9 +1029,9 @@ class PensionEngine:
                 diferencia_semanas_recalculadas=diferencia_cal,
                 semanas_futuras_proyectadas=semanas_proyectadas,
                 semanas_totales_a_la_edad=semanas_totales,
-                cumple_semanas=False,
+                cumple_semanas=cumple_semanas,
                 deficit_semanas=deficit,
-                excedente_semanas=Decimal(0),
+                excedente_semanas=excedente if cumple_semanas else Decimal(0),
                 ibl_ultimos_10_anos=None,
                 ibl_toda_la_vida=None,
                 metodo_ibl_seleccionado=None,
@@ -1014,9 +1044,7 @@ class PensionEngine:
                 incremento_tasa_pct=None,
                 tasa_reemplazo_final_pct=None,
                 mesada_bruta=None,
-                limite_aplicado="BLOQUEADO_POR_DISCREPANCIA"
-                if requiere_revision_discrepancia
-                else "NINGUNO",
+                limite_aplicado=blocking_limit,
                 descuento_salud_pct=None,
                 descuento_salud_monto=None,
                 descuento_fsp_pct=None,
@@ -1027,13 +1055,12 @@ class PensionEngine:
                 mensaje_advertencia=advertencia,
                 desglose_explicativo=desglose,
                 requiere_revision_discrepancia=requiere_revision_discrepancia,
+                bloqueado_por_periodo_desconocido=historia.periodos_desconocidos_o_faltantes,
             )
 
-        # 3. Calculate IBL using historical records + declared records + projected future records
+        # 3. Calculate IBL using historical records (including user declarations) + projected future records
         all_simulation_records = (
-            historical_records_to_horizon
-            + declared_past_records
-            + projected_future_records
+            historical_records_to_horizon + projected_future_records
         )
 
         # Finding 2.3 Fix: If there are NO salary records, block mesada with explicit warning
@@ -1056,11 +1083,7 @@ class PensionEngine:
                         scenario_name=escenario.nombre,
                         fixed_horizon_date=horizon_date.isoformat(),
                         legal_retirement_age=legal_age,
-                        inputs={
-                            "ibc_futuro": str(escenario.ibc_futuro_inicial),
-                            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
-                            "crecimiento": str(escenario.crecimiento_anual_nominal),
-                        },
+                        inputs=scenario_inputs,
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
@@ -1174,11 +1197,7 @@ class PensionEngine:
                         scenario_name=escenario.nombre,
                         fixed_horizon_date=horizon_date.isoformat(),
                         legal_retirement_age=legal_age,
-                        inputs={
-                            "ibc_futuro": str(escenario.ibc_futuro_inicial),
-                            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
-                            "crecimiento": str(escenario.crecimiento_anual_nominal),
-                        },
+                        inputs=scenario_inputs,
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
@@ -1336,11 +1355,7 @@ class PensionEngine:
                     scenario_name=escenario.nombre,
                     fixed_horizon_date=horizon_date.isoformat(),
                     legal_retirement_age=legal_age,
-                    inputs={
-                        "ibc_futuro": str(escenario.ibc_futuro_inicial),
-                        "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
-                        "crecimiento": str(escenario.crecimiento_anual_nominal),
-                    },
+                    inputs=scenario_inputs,
                     generated_future_periods_count=len(projected_future_records),
                     weeks_breakdown={
                         "documentales": str(semanas_doc),

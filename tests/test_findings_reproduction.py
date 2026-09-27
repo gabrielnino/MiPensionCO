@@ -87,10 +87,10 @@ def test_reproduce_finding_2_2_scenarios_different_ibc_change_ibl():
     engine = PensionEngine()
     recs = [
         CotizacionRecord(
-            periodo_inicio=date(2020, 1, 1),
+            periodo_inicio=date(2005, 1, 1),
             periodo_fin=date(2025, 12, 31),
-            dias_reportados=365 * 6,
-            dias_cotizados=365 * 6,
+            dias_reportados=1050 * 7,
+            dias_cotizados=1050 * 7,
             ibc=Decimal(2500000),
             aportante="EMPRESA BASE",
         )
@@ -99,7 +99,7 @@ def test_reproduce_finding_2_2_scenarios_different_ibc_change_ibl():
         cedula_enmascarada="ANON-F22",
         fecha_nacimiento=date(1970, 5, 1),
         sexo=SexCategory.MASCULINO,
-        semanas_resumen_colpensiones=Decimal(1000),
+        semanas_resumen_colpensiones=Decimal(1050),
         registros=recs,
     )
 

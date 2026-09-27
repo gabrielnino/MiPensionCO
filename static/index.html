@@ -381,7 +381,7 @@
     <div class="header-actions">
       <button class="btn btn-light" onclick="openAuditModal()">🔍 Auditoría de la Simulación</button>
       <button class="btn btn-light" onclick="openCatalogModal()">📜 Catálogo Jurídico</button>
-      <button class="btn btn-outline" style="color:white; border-color:rgba(255,255,255,0.4);" onclick="resetSession()">🗑️ Borrar Sesión</button>
+      <button class="btn btn-outline" style="color:white; border-color:rgba(255,255,255,0.4);" onclick="openResetSessionModal()">🗑️ Borrar Sesión</button>
     </div>
   </header>
 
@@ -588,8 +588,15 @@
           </div>
         </div>
 
-        <!-- TABLE 2: DETALLE DE PERIODOS DE COTIZACION DETECTADOS -->
-        <div class="card-title" style="font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.25rem;">Detalle de Períodos de Cotización Detectados (IBC Mensual)</div>
+        <!-- DUAL TABLES (Hallazgo 5) -->
+        <!-- TABLE 2A: PERIODOS EXTRAIDOS DEL PDF (INMUTABLE) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.25rem; color: var(--primary); display: flex; align-items: center; justify-content: space-between;">
+          <span>📄 Tabla 1: Períodos Extraídos del PDF (Inmutable)</span>
+          <span class="badge badge-success" style="font-size: 0.75rem;">Solo Lectura / Verificación</span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Registros capturados directamente del archivo PDF. Las notas y advertencias de inconsistencias se conservan sin alteración.
+        </p>
         <div class="table-container">
           <table id="table-registros">
             <thead>
@@ -600,6 +607,64 @@
                 <th>IBC (COP)</th>
                 <th>Empleador / Aportante</th>
                 <th>Origen</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- TABLE 2B: PERIODOS DECLARADOS O MODIFICADOS POR EL USUARIO (EDITABLE) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.75rem; margin-bottom: 0.25rem; color: #b45309; display: flex; align-items: center; justify-content: space-between;">
+          <span>✍️ Tabla 2: Períodos Modificados o Declarados por el Usuario</span>
+          <span class="badge badge-warning" style="font-size: 0.75rem;">Declaración Voluntaria / Editable</span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Incorpore o ajuste semanas laboradas no reflejadas en el PDF. Se etiquetan explícitamente como <code>DECLARACION_USUARIO</code> en la auditoría.
+        </p>
+
+        <!-- ADD DECLARED PERIOD FORM -->
+        <div class="card" style="background: #fffbeb; border: 1px dashed #f59e0b; padding: 1rem; margin-bottom: 1rem;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem;">
+            ➕ Declarar Nuevo Período de Cotización
+          </div>
+          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem;">
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Fecha Inicio:</label>
+              <input type="date" class="form-control" id="decl-inicio" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Fecha Fin:</label>
+              <input type="date" class="form-control" id="decl-fin" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Días Cotizados:</label>
+              <input type="number" class="form-control" id="decl-dias" placeholder="30" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">IBC Mensual (COP):</label>
+              <input type="number" class="form-control" id="decl-ibc" placeholder="Ej. 2500000" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Aportante / Empleador:</label>
+              <input type="text" class="form-control" id="decl-aportante" placeholder="Razón social" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+          </div>
+          <div style="margin-top: 0.5rem; text-align: right;">
+            <button id="btn-add-declared-period" class="btn btn-sm btn-primary" onclick="addDeclaredPeriod()">+ Agregar Período Declarado</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="table-registros-declarados">
+            <thead>
+              <tr>
+                <th>Inicio</th>
+                <th>Fin</th>
+                <th>Días</th>
+                <th>IBC (COP)</th>
+                <th>Empleador / Concepto</th>
+                <th>Origen</th>
+                <th>Acción</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -661,7 +726,7 @@
 
         <div class="nav-buttons">
           <button class="btn btn-outline" onclick="goToStep(3)">← Volver a Transición</button>
-          <button class="btn btn-primary" onclick="runSimulation()">Ejecutar Simulación y Ver Comparativa →</button>
+          <button id="btn-run-simulation" class="btn btn-primary" onclick="runSimulation()">Ejecutar Simulación y Ver Comparativa →</button>
         </div>
       </div>
     </div>
@@ -773,7 +838,41 @@
     </div>
   </div>
 
+  <!-- RESET SESSION MODAL (Hallazgo 7) -->
+  <div class="modal" id="reset-session-modal">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--danger);">🗑️ Reiniciar Sesión Local</h3>
+        <button class="modal-close" onclick="closeResetSessionModal()">&times;</button>
+      </div>
+      <div style="font-size: 0.9rem; margin-bottom: 1.25rem;">
+        <p>¿Desea reiniciar la sesión? Se purgarán de la memoria activa todos los datos del afiliado, el formulario de revisión y las proyecciones en pantalla.</p>
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-top: 1rem;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+            <input type="checkbox" id="chk-delete-disk-audit" style="margin-top: 3px;">
+            <span><strong>Eliminar también la auditoría guardada en este equipo</strong> (elimina archivos persistidos en disco).</span>
+          </label>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn btn-outline" onclick="closeResetSessionModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirm-reset-session" style="background: var(--danger); border-color: var(--danger);" onclick="executeResetSession()">Confirmar y Borrar Sesión</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // XSS sanitization utility
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     // State
     let currentStep = 1;
     let laborHistory = null;
@@ -781,6 +880,7 @@
     let currentExecutionId = null;
     let simulationResults = [];
     let currentAuditData = null;
+    let originalExtractedHistory = null;
     let scenarioList = [
       { id: "esc_base", nombre: "Escenario 1 (Base)", ibc: 3000000, crec: 5.0, inf: 4.0, smlmv: 5.5, pausas: [] },
       { id: "esc_opt", nombre: "Escenario 2 (Optimista)", ibc: 5000000, crec: 6.0, inf: 4.0, smlmv: 5.5, pausas: [] }
@@ -932,6 +1032,8 @@
 
     // SAFE DOM population to eliminate XSS (Finding 2.9)
     function populateReviewScreen(h) {
+      originalExtractedHistory = JSON.parse(JSON.stringify(h));
+
       document.getElementById('rev-fecha-nac').value = h.fecha_nacimiento || '';
       document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(h.fecha_nacimiento);
 
@@ -1010,22 +1112,30 @@
         resSec.style.display = 'none';
       }
 
-      // Populate Detail Table
-      const tbody = document.querySelector('#table-registros tbody');
-      tbody.innerHTML = '';
-      const recordsList = h.registros || [];
-      if (recordsList.length === 0) {
+      // Populate Dual Detail Tables
+      renderDetailTables(h.registros || []);
+    }
+
+    function renderDetailTables(records) {
+      const recordsList = records || [];
+      const pdfRecords = recordsList.filter(r => r.origen !== 'DECLARACION_USUARIO');
+      const declaredRecords = recordsList.filter(r => r.origen === 'DECLARACION_USUARIO');
+
+      // Table 1: PDF Records (Immutable)
+      const tbodyPdf = document.querySelector('#table-registros tbody');
+      tbodyPdf.innerHTML = '';
+      if (pdfRecords.length === 0) {
         const trEmpty = document.createElement('tr');
         const tdEmpty = document.createElement('td');
         tdEmpty.colSpan = 6;
         tdEmpty.style.textAlign = 'center';
         tdEmpty.style.padding = '1.5rem';
         tdEmpty.style.color = 'var(--text-muted)';
-        tdEmpty.textContent = 'No se detectaron registros de cotización mensual detallada en este documento.';
+        tdEmpty.textContent = 'No se detectaron registros de cotización mensual detallada en el PDF.';
         trEmpty.appendChild(tdEmpty);
-        tbody.appendChild(trEmpty);
+        tbodyPdf.appendChild(trEmpty);
       } else {
-        recordsList.forEach(r => {
+        pdfRecords.forEach(r => {
           const tr = document.createElement('tr');
           const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
           const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
@@ -1039,8 +1149,135 @@
           tdOrigen.appendChild(badge);
 
           tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen);
-          tbody.appendChild(tr);
+          tbodyPdf.appendChild(tr);
         });
+      }
+
+      // Table 2: User Declared Records (Editable)
+      const tbodyDecl = document.querySelector('#table-registros-declarados tbody');
+      if (tbodyDecl) {
+        tbodyDecl.innerHTML = '';
+        if (declaredRecords.length === 0) {
+          const trEmpty = document.createElement('tr');
+          const tdEmpty = document.createElement('td');
+          tdEmpty.colSpan = 7;
+          tdEmpty.style.textAlign = 'center';
+          tdEmpty.style.padding = '1rem';
+          tdEmpty.style.color = 'var(--text-muted)';
+          tdEmpty.textContent = 'No se han declarado períodos adicionales por el usuario.';
+          trEmpty.appendChild(tdEmpty);
+          tbodyDecl.appendChild(trEmpty);
+        } else {
+          declaredRecords.forEach((r, idx) => {
+            const tr = document.createElement('tr');
+            const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
+            const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
+            const tdDias = document.createElement('td'); tdDias.textContent = String(r.dias_cotizados || 0);
+            const tdIbc = document.createElement('td'); tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
+            const tdAportante = document.createElement('td'); tdAportante.textContent = r.aportante || 'APORTANTE DECLARADO';
+            const tdOrigen = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge badge-warning';
+            badge.textContent = 'DECLARACION_USUARIO';
+            tdOrigen.appendChild(badge);
+            const tdAction = document.createElement('td');
+            const btnDel = document.createElement('button');
+            btnDel.className = 'btn btn-outline btn-sm';
+            btnDel.style.color = 'var(--danger)';
+            btnDel.style.padding = '0.2rem 0.5rem';
+            btnDel.textContent = 'Eliminar';
+            btnDel.onclick = () => removeDeclaredPeriod(idx);
+            tdAction.appendChild(btnDel);
+
+            tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen, tdAction);
+            tbodyDecl.appendChild(tr);
+          });
+        }
+      }
+    }
+
+    async function addDeclaredPeriod() {
+      const ini = document.getElementById('decl-inicio').value;
+      const fin = document.getElementById('decl-fin').value;
+      const dias = parseInt(document.getElementById('decl-dias').value, 10) || 30;
+      const ibc = parseFloat(document.getElementById('decl-ibc').value) || 0;
+      const aportante = document.getElementById('decl-aportante').value || 'APORTANTE DECLARADO';
+
+      if (!ini || !fin) {
+        alert("Por favor ingrese las fechas de inicio y fin del período declarado.");
+        return;
+      }
+      if (ibc <= 0) {
+        alert("Por favor ingrese un IBC mayor a 0 para el período declarado.");
+        return;
+      }
+
+      const newRec = {
+        periodo_inicio: ini,
+        periodo_fin: fin,
+        dias_reportados: dias,
+        dias_cotizados: dias,
+        ibc: ibc,
+        aportante: aportante,
+        origen: 'DECLARACION_USUARIO'
+      };
+
+      if (!laborHistory.registros) laborHistory.registros = [];
+      laborHistory.registros.push(newRec);
+
+      document.getElementById('decl-inicio').value = '';
+      document.getElementById('decl-fin').value = '';
+      document.getElementById('decl-dias').value = '';
+      document.getElementById('decl-ibc').value = '';
+      document.getElementById('decl-aportante').value = '';
+
+      renderDetailTables(laborHistory.registros);
+
+      registerFieldCorrection(
+        `periodo_declarado_${ini}_${fin}`,
+        null,
+        `${dias} días, IBC $${ibc} COP, ${aportante}`,
+        "Inclusión de período declarado por el usuario",
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    async function removeDeclaredPeriod(declaredIndex) {
+      const declaredRecords = (laborHistory.registros || []).filter(r => r.origen === 'DECLARACION_USUARIO');
+      const targetRec = declaredRecords[declaredIndex];
+      if (!targetRec) return;
+
+      const actualIdx = laborHistory.registros.indexOf(targetRec);
+      if (actualIdx !== -1) {
+        laborHistory.registros.splice(actualIdx, 1);
+        renderDetailTables(laborHistory.registros);
+        registerFieldCorrection(
+          `periodo_declarado_${targetRec.periodo_inicio}_${targetRec.periodo_fin}`,
+          `${targetRec.dias_cotizados} días, IBC $${targetRec.ibc}`,
+          null,
+          "Eliminación de período declarado por el usuario",
+          "DECLARACION_USUARIO"
+        );
+      }
+    }
+
+    async function registerFieldCorrection(fieldName, originalVal, newVal, reason, provenance) {
+      if (!currentExecutionId) return;
+      try {
+        await fetch('/api/audit/correction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            execution_id: currentExecutionId,
+            target_field: fieldName,
+            original_value: originalVal,
+            corrected_value: newVal,
+            reason: reason || "Modificación manual en formulario de revisión",
+            provenance: provenance || "DECLARACION_USUARIO"
+          })
+        });
+      } catch (err) {
+        console.warn("No se pudo registrar la corrección en auditoría:", err);
       }
     }
 
@@ -1070,6 +1307,36 @@
       laborHistory.semanas_alto_riesgo = arVal;
       laborHistory.aportes_posteriores_estado = document.getElementById('rev-aportes-posteriores').value;
       laborHistory.periodos_desconocidos_o_faltantes = document.getElementById('rev-faltantes').value === "true";
+
+      // Register all field modifications in audit trail
+      if (currentExecutionId && originalExtractedHistory) {
+        const fieldsToCompare = [
+          { field: 'fecha_nacimiento', label: 'Fecha de Nacimiento' },
+          { field: 'sexo', label: 'Categoría para Requisitos Pensionales' },
+          { field: 'estado_afiliacion', label: 'Estado de Afiliación' },
+          { field: 'fecha_afiliacion_colpensiones', label: 'Fecha de Afiliación' },
+          { field: 'fecha_actualizacion_reporte', label: 'Fecha de Actualización' },
+          { field: 'fecha_expedicion_reporte', label: 'Fecha de Expedición' },
+          { field: 'semanas_resumen_colpensiones', label: 'Total Semanas en Resumen' },
+          { field: 'ultimo_periodo_cotizado', label: 'Último Período Cotizado' },
+          { field: 'semanas_alto_riesgo', label: 'Semanas de Alto Riesgo' },
+          { field: 'aportes_posteriores_estado', label: 'Aportes Posteriores' },
+          { field: 'periodos_desconocidos_o_faltantes', label: 'Períodos Desconocidos o Faltantes' }
+        ];
+        for (const item of fieldsToCompare) {
+          const origVal = originalExtractedHistory[item.field];
+          const newVal = laborHistory[item.field];
+          if (String(origVal) !== String(newVal) && !(origVal === null && (newVal === '' || newVal === null))) {
+            await registerFieldCorrection(
+              item.field,
+              origVal,
+              newVal,
+              `Modificación en formulario de revisión: ${item.label}`,
+              "DECLARACION_USUARIO"
+            );
+          }
+        }
+      }
 
       // Call transition evaluation API
       try {
@@ -1402,7 +1669,7 @@
           <div class="card" style="margin-bottom: 1rem; border-left: 4px solid var(--primary);">
             <div class="card-title" style="font-size: 1rem;">1. Qué Extrajo del PDF (Trazabilidad de Extracción)</div>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-              Extracción digital directa u OCR local. Huella SHA256: <code>${(currentAuditData.document_sha256||'').substring(0, 16)}...</code> | Estado: <strong>${currentAuditData.extraction_status}</strong>
+              Extracción digital directa u OCR local. Huella SHA256: <code>${escapeHTML((currentAuditData.document_sha256||'').substring(0, 16))}...</code> | Estado: <strong>${escapeHTML(currentAuditData.extraction_status)}</strong>
             </p>
             <div class="table-container">
               <table>
@@ -1412,11 +1679,11 @@
                 <tbody>
                   ${(currentAuditData.pages_audit || []).map(p => `
                     <tr>
-                      <td>${p.page_number}</td>
-                      <td><span class="badge ${p.method === 'OCR_LOCAL' ? 'badge-warning' : 'badge-success'}">${p.method}</span></td>
-                      <td>${p.text_length}</td>
-                      <td>${p.fragments_detected}</td>
-                      <td>${p.uninterpreted_lines.length > 0 ? p.uninterpreted_lines.length + ' detectadas' : '0 (Lectura completa)'}</td>
+                      <td>${escapeHTML(p.page_number)}</td>
+                      <td><span class="badge ${p.method === 'OCR_LOCAL' ? 'badge-warning' : 'badge-success'}">${escapeHTML(p.method)}</span></td>
+                      <td>${escapeHTML(p.text_length)}</td>
+                      <td>${escapeHTML(p.fragments_detected)}</td>
+                      <td>${p.uninterpreted_lines.length > 0 ? escapeHTML(p.uninterpreted_lines.length) + ' detectadas' : '0 (Lectura completa)'}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -1426,7 +1693,7 @@
               <strong>Campos Clave Verificados:</strong>
               <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
                 ${(currentAuditData.detected_fields || []).map(f => `
-                  <span class="badge badge-info">${f.field_name}: ${f.parsed_value}</span>
+                  <span class="badge badge-info">${escapeHTML(f.field_name)}: ${escapeHTML(f.parsed_value)}</span>
                 `).join('')}
               </div>
             </div>
@@ -1448,7 +1715,7 @@
             ${currentAuditData.documentary_discrepancies && currentAuditData.documentary_discrepancies.length > 0 ? `
               <div class="alert alert-warning" style="margin-top: 0.75rem; font-size: 0.8rem;">
                 <strong>Discrepancias Documentales Reportadas:</strong>
-                <ul>${currentAuditData.documentary_discrepancies.map(d => `<li>${d}</li>`).join('')}</ul>
+                <ul>${currentAuditData.documentary_discrepancies.map(d => `<li>${escapeHTML(d)}</li>`).join('')}</ul>
               </div>
             ` : '<p style="font-size:0.8rem; color:var(--success); margin-top:0.5rem;">✓ Sin inconsistencias documentales críticas.</p>'}
           </div>
@@ -1470,21 +1737,21 @@
             ${filteredScenarios.map(sc => `
               <div style="border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.85rem; background: #fff;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.5rem;">
-                  <strong style="color:var(--primary); font-size:0.95rem;">${sc.scenario_name}</strong>
-                  <span class="badge ${sc.is_blocked ? 'badge-danger' : 'badge-success'}">${sc.is_blocked ? 'BLOQUEADO: ' + sc.blocking_reason : 'LIQUIDADO'}</span>
+                  <strong style="color:var(--primary); font-size:0.95rem;">${escapeHTML(sc.scenario_name)}</strong>
+                  <span class="badge ${sc.is_blocked ? 'badge-danger' : 'badge-success'}">${sc.is_blocked ? 'BLOQUEADO: ' + escapeHTML(sc.blocking_reason) : 'LIQUIDADO'}</span>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px; font-size:0.8rem; margin-bottom:0.5rem;">
-                  <div><strong>Horizonte:</strong> ${sc.fixed_horizon_date} (${sc.legal_retirement_age} años)</div>
-                  <div><strong>Semanas Proyectadas:</strong> ${sc.weeks_breakdown.proyectadas || 0} sem</div>
-                  <div><strong>Total a la Edad:</strong> ${sc.weeks_breakdown.totales || 0} sem</div>
-                  <div><strong>Método IBL:</strong> ${sc.ibl_method_chosen}</div>
+                  <div><strong>Horizonte:</strong> ${escapeHTML(sc.fixed_horizon_date)} (${escapeHTML(sc.legal_retirement_age)} años)</div>
+                  <div><strong>Semanas Proyectadas:</strong> ${escapeHTML(sc.weeks_breakdown.proyectadas || 0)} sem</div>
+                  <div><strong>Total a la Edad:</strong> ${escapeHTML(sc.weeks_breakdown.totales || 0)} sem</div>
+                  <div><strong>Método IBL:</strong> ${escapeHTML(sc.ibl_method_chosen)}</div>
                   <div><strong>IBL Final:</strong> ${sc.ibl_final ? '$' + Number(sc.ibl_final).toLocaleString('es-CO') : 'No liquidable'}</div>
-                  <div><strong>Tasa Reemplazo:</strong> ${sc.replacement_rate_final_pct ? sc.replacement_rate_final_pct + '%' : 'N/A'}</div>
+                  <div><strong>Tasa Reemplazo:</strong> ${sc.replacement_rate_final_pct ? escapeHTML(sc.replacement_rate_final_pct) + '%' : 'N/A'}</div>
                 </div>
                 <details>
                   <summary style="font-size:0.8rem;">Ver Operaciones Paso a Paso de este Escenario</summary>
                   <ul style="font-size:0.75rem; margin-top:4px;">
-                    ${(sc.step_by_step_operations || []).map(op => `<li>${op}</li>`).join('')}
+                    ${(sc.step_by_step_operations || []).map(op => `<li>${escapeHTML(op)}</li>`).join('')}
                   </ul>
                 </details>
               </div>
@@ -1558,45 +1825,81 @@
       document.getElementById('catalog-modal').classList.remove('active');
     }
 
-    async function resetSession() {
-      if (confirm("¿Desea borrar toda la sesión y purgar los datos y auditorías cargadas?")) {
-        const q = currentExecutionId ? `?execution_id=${currentExecutionId}` : '';
-        await fetch(`/api/reset-session${q}`, { method: 'POST' });
-        laborHistory = null;
-        lastUploadedFile = null;
-        currentExecutionId = null;
-        currentAuditData = null;
-        simulationResults = [];
+    function openResetSessionModal() {
+      const chk = document.getElementById('chk-delete-disk-audit');
+      if (chk) chk.checked = false;
+      document.getElementById('reset-session-modal').classList.add('active');
+    }
 
-        // Clear Step 2 inputs and labels
-        document.getElementById('rev-fecha-nac').value = '';
-        document.getElementById('rev-fecha-nac-es').innerText = '';
-        document.getElementById('rev-estado-afil').value = 'ACTIVO';
-        document.getElementById('rev-fecha-afil').value = '';
-        document.getElementById('rev-fecha-afil-es').innerText = '';
-        document.getElementById('rev-fecha-corte').value = '';
-        document.getElementById('rev-fecha-corte-es').innerText = '';
-        document.getElementById('rev-fecha-expedicion').value = '';
-        document.getElementById('rev-fecha-expedicion-es').innerText = '';
-        document.getElementById('rev-semanas-resumen').value = '';
-        document.getElementById('rev-ultimo-periodo').value = '';
-        document.getElementById('rev-ultimo-periodo-es').innerText = '';
-        document.getElementById('rev-sexo').value = '';
-        document.getElementById('rev-alto-riesgo').value = '';
-        document.getElementById('rev-aportes-posteriores').value = 'SIN_APORTES';
-        document.getElementById('rev-faltantes').value = 'false';
+    function closeResetSessionModal() {
+      document.getElementById('reset-session-modal').classList.remove('active');
+    }
 
-        // Clear tables
-        const resTbody = document.querySelector('#table-resumen-empleadores tbody');
-        if (resTbody) resTbody.innerHTML = '';
-        const regTbody = document.querySelector('#table-registros tbody');
-        if (regTbody) regTbody.innerHTML = '';
-        const resSec = document.getElementById('section-resumen-empleador');
-        if (resSec) resSec.style.display = 'none';
+    async function executeResetSession() {
+      const chk = document.getElementById('chk-delete-disk-audit');
+      const deleteDisk = chk ? chk.checked : false;
+      closeResetSessionModal();
 
-        goToStep(1);
-        alert("Sesión y datos purgados con éxito.");
+      try {
+        await fetch(`/api/reset-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            execution_id: currentExecutionId,
+            delete_persisted_audit: deleteDisk
+          })
+        });
+      } catch (err) {
+        console.warn("Error enviando reset-session:", err);
       }
+
+      // Complete purge of active memory state
+      laborHistory = null;
+      lastUploadedFile = null;
+      currentExecutionId = null;
+      currentAuditData = null;
+      originalExtractedHistory = null;
+      simulationResults = [];
+
+      // Complete DOM clean-up
+      document.getElementById('rev-fecha-nac').value = '';
+      document.getElementById('rev-fecha-nac-es').innerText = '';
+      document.getElementById('rev-estado-afil').value = 'ACTIVO';
+      document.getElementById('rev-fecha-afil').value = '';
+      document.getElementById('rev-fecha-afil-es').innerText = '';
+      document.getElementById('rev-fecha-corte').value = '';
+      document.getElementById('rev-fecha-corte-es').innerText = '';
+      document.getElementById('rev-fecha-expedicion').value = '';
+      document.getElementById('rev-fecha-expedicion-es').innerText = '';
+      document.getElementById('rev-semanas-resumen').value = '';
+      document.getElementById('rev-ultimo-periodo').value = '';
+      document.getElementById('rev-ultimo-periodo-es').innerText = '';
+      document.getElementById('rev-sexo').value = '';
+      document.getElementById('rev-alto-riesgo').value = '';
+      document.getElementById('rev-aportes-posteriores').value = 'SIN_APORTES';
+      document.getElementById('rev-faltantes').value = 'false';
+
+      // Clear all tables
+      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+      if (resTbody) resTbody.innerHTML = '';
+      const regTbody = document.querySelector('#table-registros tbody');
+      if (regTbody) regTbody.innerHTML = '';
+      const declTbody = document.querySelector('#table-registros-declarados tbody');
+      if (declTbody) declTbody.innerHTML = '';
+      const resSec = document.getElementById('section-resumen-empleador');
+      if (resSec) resSec.style.display = 'none';
+
+      // Clear scenario and results containers
+      const resContainer = document.getElementById('simulation-output');
+      if (resContainer) resContainer.innerHTML = '';
+
+      goToStep(1);
+      alert(deleteDisk ? "Sesión y auditoría en disco purgadas con éxito." : "Memoria de sesión purgada con éxito (auditoría en disco preservada).");
+    }
+
+    // Keep resetSession for backward compatibility
+    async function resetSession() {
+      openResetSessionModal();
     }
 
     function exportResultsJSON() {

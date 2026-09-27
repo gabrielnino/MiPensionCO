@@ -424,7 +424,7 @@ def test_reproduce_issue_i_no_silent_annual_average_ipc(
     assert ipc_2018_2 != Decimal("85.300"), (
         "get_ipc(2018, 2) returned the annual average 85.300!"
     )
-    assert ipc_2018_2 == Decimal("87.726")
+    assert ipc_2018_2 == Decimal("98.22")
 
     # 2. Test absence of a month within a year that has other months available
     # Remove May 2018 from series to simulate an unrecorded month

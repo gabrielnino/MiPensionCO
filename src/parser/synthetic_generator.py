@@ -16,6 +16,7 @@ def create_synthetic_colpensiones_pdf(
     sexo: str = "MASCULINO",
     fecha_afiliacion: str = "01/02/1995",
     fecha_expedicion: str = "15/08/2025",
+    fecha_actualizacion: str | None = None,
     estado: str = "ACTIVO",
     total_semanas: str = "910.43",
     alto_riesgo: str = "0",
@@ -26,10 +27,11 @@ def create_synthetic_colpensiones_pdf(
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)  # A4
 
+    act_line = f"ACTUALIZADO A: {fecha_actualizacion}\n" if fecha_actualizacion else ""
     text = f"""
 ADMINISTRADORA COLOMBIANA DE PENSIONES - COLPENSIONES
 HISTORIA LABORAL UNIFICADA - CERTIFICADO DE INFORMACION LABORAL
-
+{act_line}
 INFORMACION DEL AFILIADO
 Numero de Documento: CC {cedula}
 Nombre del Afiliado: {nombre}

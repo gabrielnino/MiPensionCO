@@ -61,3 +61,5 @@ backups/
 .coverage
 .coverage.*
 htmlcov/
+audit/
+

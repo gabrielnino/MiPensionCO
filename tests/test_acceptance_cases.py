@@ -324,12 +324,12 @@ def test_women_weeks_schedule_by_year_2025_to_2036():
 # 12. IBL with gaps: effective 10 years (SL18546-2016)
 def test_ibl_effective_ten_years_skips_calendar_gaps():
     engine = PensionEngine()
-    # 5 years in 2000-2005 (1825 days) + 5-year gap + 5 years in 2010-2015 (1825 days)
+    # 5 years in 2004-2009 (1825 days) + 5-year gap + 5 years in 2014-2019 (1825 days)
     recs_early = make_cotizaciones(
-        start_year=2000, total_weeks=260, monthly_ibc=Decimal(2000000)
+        start_year=2004, total_weeks=260, monthly_ibc=Decimal(2000000)
     )
     recs_late = make_cotizaciones(
-        start_year=2010, total_weeks=260, monthly_ibc=Decimal(4000000)
+        start_year=2014, total_weeks=260, monthly_ibc=Decimal(4000000)
     )
     historia = HistoriaLaboral(
         cedula_enmascarada="ANON-9",
@@ -350,7 +350,7 @@ def test_ibl_lifetime_selection_only_with_1250_weeks():
     engine = PensionEngine()
     # 1,200 weeks (< 1,250): Lifetime average is not selectable
     recs = make_cotizaciones(
-        start_year=2000, total_weeks=1200, monthly_ibc=Decimal(3000000)
+        start_year=2003, total_weeks=1200, monthly_ibc=Decimal(3000000)
     )
     historia = HistoriaLaboral(
         cedula_enmascarada="ANON-10",
@@ -365,16 +365,16 @@ def test_ibl_lifetime_selection_only_with_1250_weeks():
 
     # Now 1,300 weeks (>= 1,250)
     recs_1300 = make_cotizaciones(
-        start_year=1995, total_weeks=1300, monthly_ibc=Decimal(3000000)
+        start_year=2003, total_weeks=1300, monthly_ibc=Decimal(3000000)
     )
     historia_1300 = HistoriaLaboral(
         cedula_enmascarada="ANON-11",
-        fecha_nacimiento=date(1964, 1, 1),
+        fecha_nacimiento=date(1966, 1, 1),
         sexo=SexCategory.MASCULINO,
         registros=recs_1300,
     )
     _ibl_10y, ibl_all, _metodo, _ibl_final = engine.calculate_ibl(
-        historia_1300, target_year=2026, target_month=8
+        historia_1300, target_year=2028, target_month=1
     )
     assert ibl_all is not None
 
@@ -426,16 +426,16 @@ def test_minimum_pension_guarantee_one_smlmv():
     engine = PensionEngine()
     # Low wages such that initial calculated mesada is below 1 SMLMV
     recs = make_cotizaciones(
-        start_year=2000, total_weeks=1300, monthly_ibc=Decimal(400000)
+        start_year=2003, total_weeks=1300, monthly_ibc=Decimal(400000)
     )
     historia = HistoriaLaboral(
         cedula_enmascarada="ANON-12",
-        fecha_nacimiento=date(1964, 1, 1),
+        fecha_nacimiento=date(1966, 1, 1),
         sexo=SexCategory.MASCULINO,
         registros=recs,
         semanas_resumen_colpensiones=Decimal(1300),
     )
-    esc = EscenarioConfig("esc1", "Escenario 1", Decimal(1537380), date(2026, 1, 1))
+    esc = EscenarioConfig("esc1", "Escenario 1", Decimal(1537380), date(2028, 1, 1))
     res = engine.simulate_scenario(historia, esc, as_of_date=date(2026, 9, 27))
     assert res.cumple_semanas is True
     # Initial calculated rate is below 1 SMLMV, but statutory guarantee raises it to 1 SMLMV
