@@ -133,3 +133,26 @@ Se conserva la edad de retiro y se auditan la opción y la fecha final de aporte
 El último día puede superar el mínimo en una fracción de semana. Si no alcanza
 antes del horizonte, se conserva el déficit. Clientes antiguos que omiten la opción
 mantienen la proyección hasta la edad de retiro.
+
+
+### Calendarios alternos y aportes al final
+
+Ambas opciones están desmarcadas por defecto y son independientes por escenario.
+El ciclo alterno comienza con un año activo desde el inicio efectivo de proyección,
+seguido por un año sin aportes. La opción de últimos años selecciona los últimos días
+disponibles anteriores a la edad de retiro hasta completar el mínimo, conservando
+la historia original. Combinadas, seleccionan los últimos días elegibles del ciclo
+alterno. Se respetan pausas expresas; si el tiempo no alcanza se informa déficit.
+La opción de últimos años siempre limita al mínimo aunque la casilla general de
+mínimo esté desmarcada. No cambia la edad de retiro ni elimina historia del IBL.
+El IBC nominal crece desde el año base del escenario, también en años sin aportes.
+La auditoría registra las opciones y las fechas inicial y final de aportes futuros.
+
+
+### Escenario sin nuevos aportes
+
+«No cotizar más» está desmarcado inicialmente. Tiene prioridad sobre los otros
+calendarios: no genera días ni IBC futuros y conserva los registros existentes.
+La evaluación sigue a la edad de retiro; si faltan semanas, se muestra el déficit
+y la mesada queda sin liquidar (no se presenta como una pensión de cero pesos).
+La selección queda registrada en la auditoría del escenario.

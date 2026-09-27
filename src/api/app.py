@@ -164,6 +164,9 @@ class EscenarioInputDTO(BaseModel):
     ibc_futuro_inicial: float
     fecha_inicio_ibc: str
     aportar_hasta_minimo: bool = False
+    cotizar_anos_alternos: bool = False
+    cotizar_ultimos_anos: bool = False
+    no_cotizar_mas: bool = False
     crecimiento_anual_nominal: float = 0.05
     periodos_sin_aporte: list[list[str]] = []  # [["YYYY-MM-DD", "YYYY-MM-DD"]]
     supuesto_inflacion: float = 0.040
@@ -814,6 +817,9 @@ async def simulate_endpoint(req: SimulateRequestDTO) -> JSONResponse:
             ibc_futuro_inicial=Decimal(str(esc_dto.ibc_futuro_inicial)),
             fecha_inicio_ibc=f_ini_ibc,
             aportar_hasta_minimo=esc_dto.aportar_hasta_minimo,
+            cotizar_anos_alternos=esc_dto.cotizar_anos_alternos,
+            cotizar_ultimos_anos=esc_dto.cotizar_ultimos_anos,
+            no_cotizar_mas=esc_dto.no_cotizar_mas,
             crecimiento_anual_nominal=Decimal(str(esc_dto.crecimiento_anual_nominal)),
             periodos_sin_aporte=pausas,
             supuesto_inflacion=Decimal(str(esc_dto.supuesto_inflacion)),

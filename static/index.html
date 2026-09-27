@@ -2056,12 +2056,27 @@
               <input type="number" class="form-control" value="${esc.inf}" step="0.1" onchange="scenarioList[${idx}].inf = parseFloat(this.value)||4.0">
             </div>
             <div class="form-group" style="justify-content: center; grid-column: span 2;">
+              <label style="display:flex; align-items:center; gap:0.6rem;">
+                <input type="checkbox" class="scenario-no-more" ${esc.noMas === true ? 'checked' : ''}
+                  onchange="scenarioList[${idx}].noMas = this.checked; renderScenarioCards()">
+                No cotizar más
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Conserva los aportes registrados y no agrega semanas futuras. Si faltan semanas, muestra el déficit sin liquidar una mesada. El IBC futuro no se utiliza.</span>
               <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
-                <input type="checkbox" class="scenario-stop-minimum" ${esc.hastaMinimo !== false ? 'checked' : ''}
+                <input type="checkbox" class="scenario-stop-minimum" ${esc.noMas === true ? 'disabled' : ''} ${esc.hastaMinimo !== false ? 'checked' : ''}
                   onchange="scenarioList[${idx}].hastaMinimo = this.checked">
                 Aportar hasta completar el mínimo requerido
               </label>
               <span style="font-size:0.75rem; color:var(--text-muted);">Al desmarcar, se proyectan aportes hasta la edad de retiro. La edad de retiro no cambia.</span>
+              <label style="display:flex; align-items:center; gap:0.6rem; margin-top:0.7rem;">
+                <input type="checkbox" class="scenario-alternate" ${esc.noMas === true ? 'disabled' : ''} ${esc.alternos === true ? 'checked' : ''} onchange="scenarioList[${idx}].alternos = this.checked">
+                Cotizar un año sí y un año no
+              </label>
+              <label style="display:flex; align-items:center; gap:0.6rem;">
+                <input type="checkbox" class="scenario-latest" ${esc.noMas === true ? 'disabled' : ''} ${esc.ultimos === true ? 'checked' : ''} onchange="scenarioList[${idx}].ultimos = this.checked">
+                Cotizar los últimos años hasta completar las semanas requeridas
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Últimos años: espera y concentra los aportes al final; conserva tu historia laboral. Si marcas ambas, usa los últimos días del calendario alterno. El crecimiento del IBC sigue desde el año base del escenario, incluso durante las pausas.</span>
             </div>
           </div>
         `;
@@ -2099,6 +2114,9 @@
           ibc_futuro_inicial: esc.ibc,
           fecha_inicio_ibc: "2026-01-01",
           aportar_hasta_minimo: esc.hastaMinimo !== false,
+          cotizar_anos_alternos: esc.alternos === true,
+          cotizar_ultimos_anos: esc.ultimos === true,
+          no_cotizar_mas: esc.noMas === true,
           crecimiento_anual_nominal: esc.crec / 100.0,
           periodos_sin_aporte: esc.pausas || [],
           supuesto_inflacion: esc.inf / 100.0,

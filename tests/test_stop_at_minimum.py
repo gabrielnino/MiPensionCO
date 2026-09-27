@@ -54,3 +54,16 @@ def test_stop_at_minimum_and_continue_are_independent() -> None:
         ).semanas_futuras_proyectadas
         == 1
     )
+
+    no_more = replace(
+        scenario,
+        no_cotizar_mas=True,
+        cotizar_anos_alternos=True,
+        cotizar_ultimos_anos=True,
+    )
+    stopped = engine.simulate_scenario(history, no_more, as_of_date=end)
+    assert stopped.semanas_futuras_proyectadas == 0
+    assert stopped.semanas_totales_a_la_edad == 1299
+    assert stopped.deficit_semanas == 1
+    assert stopped.mesada_bruta is None
+    assert not stopped.cumple_semanas

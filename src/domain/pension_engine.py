@@ -25,6 +25,7 @@ from src.audit.models import (
     ScenarioCalculationAudit,
 )
 from src.audit.service import AuditService
+from src.domain.contribution_schedule import contribution_dates
 from src.domain.models import (
     AffiliationStatus,
     CotizacionRecord,
@@ -870,7 +871,7 @@ class PensionEngine:
             prefix: str,
         ) -> list[CotizacionRecord]:
             res_recs: list[CotizacionRecord] = []
-            if start_date >= end_date:
+            if escenario.no_cotizar_mas or start_date >= end_date:
                 return res_recs
 
             remaining_days = (
@@ -883,8 +884,18 @@ class PensionEngine:
                         * 7
                     ).to_integral_value(rounding=ROUND_CEILING)
                 )
-                if escenario.aportar_hasta_minimo
+                if escenario.aportar_hasta_minimo or escenario.cotizar_ultimos_anos
                 else None
+            )
+            scheduled = set(
+                contribution_dates(
+                    start_date,
+                    end_date,
+                    remaining_days,
+                    escenario.cotizar_anos_alternos,
+                    escenario.cotizar_ultimos_anos,
+                    merged_pauses,
+                )
             )
             cur_y, cur_m = start_date.year, start_date.month
             while (cur_y < end_date.year) or (
@@ -903,31 +914,16 @@ class PensionEngine:
                     span_cal_days = (m_end - m_start).days + 1
                     full_month_days = m_last_day
 
-                    # Deduct ONLY days that intersect with pauses (Finding C)
-                    paused_days = 0
-                    for p_start, p_end in merged_pauses:
-                        inter_s = max(m_start, p_start)
-                        inter_e = min(m_end, p_end)
-                        if inter_s <= inter_e:
-                            paused_days += (inter_e - inter_s).days + 1
-
-                    active_cal_days = max(0, span_cal_days - paused_days)
-
-                    if remaining_days is not None and active_cal_days > 0:
-                        allowed_days = min(active_cal_days, remaining_days)
-                        credited = 0
-                        for offset in range(span_cal_days):
-                            contribution_day = m_start + timedelta(days=offset)
-                            if any(
-                                a <= contribution_day <= b for a, b in merged_pauses
-                            ):
-                                continue
-                            credited += 1
-                            if credited == allowed_days:
-                                m_end = contribution_day
-                                break
-                        active_cal_days = allowed_days
-                        remaining_days -= allowed_days
+                    active_dates = [
+                        m_start + timedelta(days=offset)
+                        for offset in range(span_cal_days)
+                        if m_start + timedelta(days=offset) in scheduled
+                    ]
+                    active_cal_days = len(active_dates)
+                    if active_dates:
+                        m_start, m_end = active_dates[0], active_dates[-1]
+                    if remaining_days is not None:
+                        remaining_days -= active_cal_days
 
                     if active_cal_days > 0:
                         # Finding E: Separate calendar coverage days from 30-day billing convention
@@ -1053,9 +1049,33 @@ class PensionEngine:
                 f"Semanas proyectadas hasta la edad legal: {semanas_proyectadas} (con IBC proyectado ${escenario.ibc_futuro_inicial:,.0f} COP)."
             )
 
+        if escenario.no_cotizar_mas:
+            desglose.append(
+                "Escenario sin nuevos aportes: se conserva exclusivamente la historia registrada. Las otras opciones de aportes futuros no se aplican."
+            )
+        if escenario.cotizar_anos_alternos and not escenario.no_cotizar_mas:
+            desglose.append(
+                "Calendario alterno: un año de aportes y un año sin aportes, desde el inicio de la proyección."
+            )
+        if escenario.cotizar_ultimos_anos and not escenario.no_cotizar_mas:
+            desglose.append(
+                "Se seleccionan los últimos días disponibles antes del retiro hasta completar el mínimo; se conserva toda la historia laboral."
+            )
+        if projected_future_records:
+            desglose.append(
+                f"Aportes futuros: desde {projected_future_records[0].periodo_inicio.isoformat()} hasta {projected_future_records[-1].periodo_fin.isoformat()}, respetando las pausas del escenario."
+            )
         desglose.append(f"Total semanas a la edad legal: {semanas_totales}.")
 
         scenario_inputs: dict[str, Any] = {
+            "no_cotizar_mas": escenario.no_cotizar_mas,
+            "cotizar_anos_alternos": escenario.cotizar_anos_alternos,
+            "cotizar_ultimos_anos": escenario.cotizar_ultimos_anos,
+            "fecha_inicio_aportes_proyectados": projected_future_records[
+                0
+            ].periodo_inicio.isoformat()
+            if projected_future_records
+            else None,
             "aportar_hasta_minimo": escenario.aportar_hasta_minimo,
             "fecha_fin_aportes_proyectados": projected_future_records[
                 -1
@@ -1072,8 +1092,11 @@ class PensionEngine:
             "motivo_terminacion_o_pausa_aportes": (
                 "Superó edad legal ordinaria previa a la simulación; no se proyectan aportes hacia el pasado."
                 if ya_supero_edad
+                else "No cotizar más: escenario sin aportes futuros."
+                if escenario.no_cotizar_mas
                 else "Mínimo requerido alcanzado; cesan los aportes, se mantiene la edad de retiro."
-                if escenario.aportar_hasta_minimo and cumple_semanas
+                if (escenario.aportar_hasta_minimo or escenario.cotizar_ultimos_anos)
+                and cumple_semanas
                 else "Llegada a la fecha de cumplimiento de edad legal ordinaria (horizonte fijo de retiro)."
             ),
             "supuestos_economicos": {

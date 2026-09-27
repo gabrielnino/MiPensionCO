@@ -222,6 +222,9 @@ class EscenarioConfig:
     supuesto_inflacion: Decimal = Decimal("0.040")
     supuesto_crecimiento_smlmv: Decimal = Decimal("0.055")
     aportar_hasta_minimo: bool = False
+    cotizar_anos_alternos: bool = False
+    cotizar_ultimos_anos: bool = False
+    no_cotizar_mas: bool = False
 
 
 @dataclass(frozen=True)
