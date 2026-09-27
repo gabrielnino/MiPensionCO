@@ -291,6 +291,8 @@ class PensionEngine:
         """
         clipped: list[CotizacionRecord] = []
         for r in registros:
+            if r.excluido_del_calculo:
+                continue
             if r.periodo_inicio > horizon_date:
                 continue
             if r.periodo_fin <= horizon_date:
@@ -321,6 +323,12 @@ class PensionEngine:
                         fila=r.fila,
                         dias_pendientes_validacion=r.dias_pendientes_validacion,
                         source_fragment_ids=r.source_fragment_ids,
+                        record_id=r.record_id,
+                        excluido_del_calculo=r.excluido_del_calculo,
+                        motivo_exclusion=r.motivo_exclusion,
+                        motivo_correccion=r.motivo_correccion,
+                        estado_validacion=r.estado_validacion,
+                        valor_original=r.valor_original,
                     )
                 )
         return clipped
@@ -337,11 +345,15 @@ class PensionEngine:
         For partial periods, credits min(dias_cotizados, span_days).
         If horizon_date is specified, clips all records to horizon_date (Finding F).
         """
-        active_records = (
-            cls.clip_records_to_horizon(registros, horizon_date)
-            if horizon_date
-            else registros
-        )
+        active_records = [
+            r
+            for r in (
+                cls.clip_records_to_horizon(registros, horizon_date)
+                if horizon_date
+                else registros
+            )
+            if not r.excluido_del_calculo
+        ]
         cotized_days: set[date] = set()
         for r in active_records:
             span_days = (r.periodo_fin - r.periodo_inicio).days + 1
@@ -377,6 +389,8 @@ class PensionEngine:
         month_buckets: dict[tuple[int, int], list[tuple[int, Decimal]]] = {}
 
         for r in registros:
+            if r.excluido_del_calculo:
+                continue
             # Finding 2.8: exclude contributions starting strictly after the horizon date
             if horizon_date and r.periodo_inicio > horizon_date:
                 continue
@@ -442,6 +456,19 @@ class PensionEngine:
                 consolidated.append((y, m, month_days, total_ibc_month))
 
         return consolidated
+
+    @classmethod
+    def build_monthly_cotizaciones(
+        cls,
+        registros: list[CotizacionRecord],
+        horizon_date: date | None = None,
+    ) -> list[dict[str, Any]]:
+        """Convenience method returning list of monthly cotizaciones dictionaries."""
+        consolidated = cls.consolidate_monthly_contributions(registros, horizon_date)
+        return [
+            {"year": y, "month": m, "days": d, "ibc": ibc}
+            for y, m, d, ibc in consolidated
+        ]
 
     def calculate_ibl(
         self,
@@ -1071,6 +1098,30 @@ class PensionEngine:
                         is_blocked=True,
                         blocking_reason=blocking_code,
                         step_by_step_operations=desglose,
+                        data_version_used=f"Rev {historia.revision_version} ({historia.revision_id})",
+                        provenance_counts={
+                            "PDF": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.PDF
+                                and not r.excluido_del_calculo
+                            ),
+                            "DECLARACION_USUARIO": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.DECLARACION_USUARIO
+                                and not r.excluido_del_calculo
+                            ),
+                            "CORRECCION_MANUAL": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.CORRECCION_MANUAL
+                                and not r.excluido_del_calculo
+                            ),
+                            "EXCLUIDO": sum(
+                                1 for r in historia.registros if r.excluido_del_calculo
+                            ),
+                        },
                     ),
                 )
                 AuditService.log_technical(
@@ -1184,6 +1235,30 @@ class PensionEngine:
                         is_blocked=True,
                         blocking_reason="IBL_INSUFICIENTE_DATOS_SALARIALES",
                         step_by_step_operations=desglose,
+                        data_version_used=f"Rev {historia.revision_version} ({historia.revision_id})",
+                        provenance_counts={
+                            "PDF": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.PDF
+                                and not r.excluido_del_calculo
+                            ),
+                            "DECLARACION_USUARIO": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.DECLARACION_USUARIO
+                                and not r.excluido_del_calculo
+                            ),
+                            "CORRECCION_MANUAL": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.CORRECCION_MANUAL
+                                and not r.excluido_del_calculo
+                            ),
+                            "EXCLUIDO": sum(
+                                1 for r in historia.registros if r.excluido_del_calculo
+                            ),
+                        },
                     ),
                 )
                 AuditService.log_technical(
@@ -1300,6 +1375,30 @@ class PensionEngine:
                         is_blocked=True,
                         blocking_reason="IPC_FALTANTE_HISTORICO",
                         step_by_step_operations=desglose,
+                        data_version_used=f"Rev {historia.revision_version} ({historia.revision_id})",
+                        provenance_counts={
+                            "PDF": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.PDF
+                                and not r.excluido_del_calculo
+                            ),
+                            "DECLARACION_USUARIO": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.DECLARACION_USUARIO
+                                and not r.excluido_del_calculo
+                            ),
+                            "CORRECCION_MANUAL": sum(
+                                1
+                                for r in historia.registros
+                                if r.origen == ProvenanceType.CORRECCION_MANUAL
+                                and not r.excluido_del_calculo
+                            ),
+                            "EXCLUIDO": sum(
+                                1 for r in historia.registros if r.excluido_del_calculo
+                            ),
+                        },
                     ),
                 )
                 AuditService.log_technical(
@@ -1463,6 +1562,30 @@ class PensionEngine:
                     is_blocked=False,
                     blocking_reason=None,
                     step_by_step_operations=desglose,
+                    data_version_used=f"Rev {historia.revision_version} ({historia.revision_id})",
+                    provenance_counts={
+                        "PDF": sum(
+                            1
+                            for r in historia.registros
+                            if r.origen == ProvenanceType.PDF
+                            and not r.excluido_del_calculo
+                        ),
+                        "DECLARACION_USUARIO": sum(
+                            1
+                            for r in historia.registros
+                            if r.origen == ProvenanceType.DECLARACION_USUARIO
+                            and not r.excluido_del_calculo
+                        ),
+                        "CORRECCION_MANUAL": sum(
+                            1
+                            for r in historia.registros
+                            if r.origen == ProvenanceType.CORRECCION_MANUAL
+                            and not r.excluido_del_calculo
+                        ),
+                        "EXCLUIDO": sum(
+                            1 for r in historia.registros if r.excluido_del_calculo
+                        ),
+                    },
                 ),
             )
             AuditService.log_technical(

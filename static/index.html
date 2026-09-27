@@ -264,6 +264,10 @@
     .badge-danger { background: var(--danger-bg); color: var(--danger); }
     .badge-warning { background: var(--warning-bg); color: var(--warning); }
     .badge-info { background: var(--info-bg); color: var(--primary); }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; }
+    .filter-btn.active { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; }
+    tr.row-excluded td { opacity: 0.6; text-decoration: line-through; }
+    tr.row-excluded td:last-child { text-decoration: none; opacity: 1; }
 
     /* Modal */
     .modal {
@@ -397,16 +401,19 @@
         <div class="step-num">1</div> Carga de Historia Laboral
       </div>
       <div class="step-item" id="step-nav-2" onclick="goToStep(2)">
-        <div class="step-num">2</div> Revisión y Corrección
+        <div class="step-num">2</div> Datos del Afiliado
       </div>
       <div class="step-item" id="step-nav-3" onclick="goToStep(3)">
-        <div class="step-num">3</div> Evaluación de Transición
+        <div class="step-num">3</div> Revisar Períodos y Semanas
       </div>
       <div class="step-item" id="step-nav-4" onclick="goToStep(4)">
-        <div class="step-num">4</div> Configuración de Escenarios
+        <div class="step-num">4</div> Evaluación de Transición
       </div>
       <div class="step-item" id="step-nav-5" onclick="goToStep(5)">
-        <div class="step-num">5</div> Resultados y Comparativa
+        <div class="step-num">5</div> Configuración de Escenarios
+      </div>
+      <div class="step-item" id="step-nav-6" onclick="goToStep(6)">
+        <div class="step-num">6</div> Resultados y Comparativa
       </div>
     </div>
 
@@ -562,18 +569,66 @@
           </div>
         </div>
 
-        <!-- TABLE 1: RESUMEN DE SEMANAS COTIZADAS POR EMPLEADOR -->
-        <div id="section-resumen-empleador" style="display:none; margin-top: 1.5rem;">
-          <div class="card-title" style="font-size: 1rem; margin-bottom: 0.25rem;">Resumen Documental de Semanas por Empleador</div>
-          <div id="banner-resumen-only" class="alert alert-info" style="display:none; font-size: 0.85rem; margin-bottom: 0.75rem;">
-            ℹ️ <strong>Resumen por Empleador Extraído:</strong> Se extrajo la tabla consolidada por aportante. El reporte no incluye la relación mensual detallada (IBC histórico); para proyectar mesada en la simulación se podrán ingresar salarios estimados.
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(1)">← Cargar otro PDF</button>
+          <button class="btn btn-primary" id="btn-to-review-periods" onclick="validateAndGoToReviewPeriods()">Continuar a Revisar Períodos y Semanas →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: REVISAR PERIODOS Y SEMANAS (NUEVA PANTALLA DEDICADA) -->
+    <div class="step-panel" id="step-panel-3" style="display:none;">
+      <div class="card">
+        <div class="card-title">Revisar Períodos y Semanas de Cotización</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Inspeccione y concilie los períodos de cotización extraídos del reporte oficial antes de proceder con la evaluación de transición.
+          Puede verificar el resumen por aportante, editar períodos con su motivo, excluir aportes o declarar períodos omitidos.
+        </p>
+
+        <!-- RESUMEN DE CONCILIACIÓN DE SEMANAS (4 KPIS) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+          <span>⚖️</span> Conciliación de Semanas Cotizadas
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Resumen PDF</div>
+            <div class="kpi-val" id="recon-kpi-pdf">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Certificadas en resumen</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Detalle Recalculadas</div>
+            <div class="kpi-val" id="recon-kpi-detalle">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Cómputo días calendario (SL138-2024)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Aportes Declarados</div>
+            <div class="kpi-val" id="recon-kpi-declaradas">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Agregados por el usuario</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Totales Activas</div>
+            <div class="kpi-val" id="recon-kpi-activas" style="color: var(--primary);">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Base para evaluar transición</div>
+          </div>
+        </div>
+
+        <div id="recon-discrepancia-banner" style="margin-bottom: 1.25rem;"></div>
+
+        <!-- TABLA 1: RESUMEN POR EMPLEADOR (DOCUMENTAL) -->
+        <div id="section-resumen-empleador" style="display:none; margin-top: 1.5rem; margin-bottom: 2rem;">
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.35rem; color: var(--text); display: flex; align-items: center; justify-content: space-between;">
+            <span>🏢 Tabla 1: Resumen Documental de Semanas por Empleador</span>
+            <span class="badge badge-info" style="font-size: 0.75rem;">Consolidado Oficial por Aportante</span>
+          </div>
+          <div class="alert alert-info" style="font-size: 0.82rem; margin-bottom: 0.75rem; line-height: 1.5;">
+            ℹ️ <strong>Criterio Actuarial:</strong> El "último salario" reportado en este resumen corresponde exclusivamente al último ingreso registrado ante cada aportante y <strong>NO se proyecta como IBC mensual para todos los períodos, ni se suma como aportes independientes al detalle</strong> para evitar duplicaciones.
           </div>
           <div class="table-container">
             <table id="table-resumen-empleadores">
               <thead>
                 <tr>
+                  <th>Aportante / Razón Social</th>
                   <th>NIT / Identificación</th>
-                  <th>Nombre o Razón Social</th>
                   <th>Desde</th>
                   <th>Hasta</th>
                   <th>Último Salario</th>
@@ -588,46 +643,56 @@
           </div>
         </div>
 
-        <!-- DUAL TABLES (Hallazgo 5) -->
-        <!-- TABLE 2A: PERIODOS EXTRAIDOS DEL PDF (INMUTABLE) -->
-        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.25rem; color: var(--primary); display: flex; align-items: center; justify-content: space-between;">
-          <span>📄 Tabla 1: Períodos Extraídos del PDF (Inmutable)</span>
-          <span class="badge badge-success" style="font-size: 0.75rem;">Solo Lectura / Verificación</span>
+        <!-- TABLA 2: DETALLE DE COTIZACIONES (EDITABLE CON PROCEDENCIA) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.35rem; color: var(--text); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <span>📋 Tabla 2: Detalle de Períodos de Cotización</span>
+          <span class="badge badge-purple" style="font-size: 0.75rem;">Auditable fila a fila</span>
         </div>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-          Registros capturados directamente del archivo PDF. Las notas y advertencias de inconsistencias se conservan sin alteración.
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Relación mensual de aportes. Cada registro conserva su página de origen, estado de validación y procedencia. Puede editar fechas/IBC con motivo obligatorio, restaurar originales o excluir del cálculo.
         </p>
+
+        <!-- Filtros y buscador del detalle -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 0.75rem;">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <button class="btn btn-outline btn-sm filter-btn active" id="filter-btn-all" onclick="filterDetailRecords('ALL')">Todos (<span id="count-filter-all">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-valid" onclick="filterDetailRecords('VALID')">Válidos (<span id="count-filter-valid">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-corrected" onclick="filterDetailRecords('CORRECTED')">Corregidos (<span id="count-filter-corrected">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-excluded" onclick="filterDetailRecords('EXCLUDED')">Excluidos (<span id="count-filter-excluded">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-declared" onclick="filterDetailRecords('DECLARED')">Declarados (<span id="count-filter-declared">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-warnings" onclick="filterDetailRecords('WARNINGS')">Con Advertencia (<span id="count-filter-warnings">0</span>)</button>
+          </div>
+          <div style="min-width: 200px;">
+            <input type="text" id="search-detail-records" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;" placeholder="Buscar aportante, año o período..." oninput="filterDetailRecords()">
+          </div>
+        </div>
+
         <div class="table-container">
           <table id="table-registros">
             <thead>
               <tr>
-                <th>Inicio</th>
-                <th>Fin</th>
-                <th>Días</th>
+                <th style="width: 50px;">Pág.</th>
+                <th>Período</th>
+                <th>Días Rep.</th>
+                <th>Días Rec.</th>
                 <th>IBC (COP)</th>
-                <th>Empleador / Aportante</th>
-                <th>Origen</th>
+                <th>Aportante / Empleador</th>
+                <th>Procedencia</th>
+                <th>Estado</th>
+                <th style="text-align: center; min-width: 170px;">Acciones</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
 
-        <!-- TABLE 2B: PERIODOS DECLARADOS O MODIFICADOS POR EL USUARIO (EDITABLE) -->
-        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.75rem; margin-bottom: 0.25rem; color: #b45309; display: flex; align-items: center; justify-content: space-between;">
-          <span>✍️ Tabla 2: Períodos Modificados o Declarados por el Usuario</span>
-          <span class="badge badge-warning" style="font-size: 0.75rem;">Declaración Voluntaria / Editable</span>
-        </div>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-          Incorpore o ajuste semanas laboradas no reflejadas en el PDF. Se etiquetan explícitamente como <code>DECLARACION_USUARIO</code> en la auditoría.
-        </p>
-
-        <!-- ADD DECLARED PERIOD FORM -->
-        <div class="card" style="background: #fffbeb; border: 1px dashed #f59e0b; padding: 1rem; margin-bottom: 1rem;">
-          <div style="font-weight: 700; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem;">
-            ➕ Declarar Nuevo Período de Cotización
+        <!-- FORMULARIO DECLARAR PERÍODO ADICIONAL -->
+        <div class="card" style="background: #fffbeb; border: 1px dashed #f59e0b; padding: 1rem; margin-top: 1.5rem; margin-bottom: 1rem;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>➕ Declarar Nuevo Período de Cotización</span>
+            <span class="badge badge-warning" style="font-size: 0.7rem;">DECLARACION_USUARIO</span>
           </div>
-          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem;">
+          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
             <div class="form-group">
               <label style="font-size: 0.75rem;">Fecha Inicio:</label>
               <input type="date" class="form-control" id="decl-inicio" style="font-size: 0.8rem; padding: 0.35rem;">
@@ -642,11 +707,15 @@
             </div>
             <div class="form-group">
               <label style="font-size: 0.75rem;">IBC Mensual (COP):</label>
-              <input type="number" class="form-control" id="decl-ibc" placeholder="Ej. 2500000" style="font-size: 0.8rem; padding: 0.35rem;">
+              <input type="number" class="form-control" id="decl-ibc" placeholder="Ej. 2000000" style="font-size: 0.8rem; padding: 0.35rem;">
             </div>
             <div class="form-group">
               <label style="font-size: 0.75rem;">Aportante / Empleador:</label>
-              <input type="text" class="form-control" id="decl-aportante" placeholder="Razón social" style="font-size: 0.8rem; padding: 0.35rem;">
+              <input type="text" class="form-control" id="decl-aportante" placeholder="Razón social o concepto" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label style="font-size: 0.75rem;">Motivo de la Declaración (Obligatorio):</label>
+              <input type="text" class="form-control" id="decl-motivo" placeholder="Ej. Período laborado no registrado en el extracto" style="font-size: 0.8rem; padding: 0.35rem;">
             </div>
           </div>
           <div style="margin-top: 0.5rem; text-align: right;">
@@ -654,32 +723,18 @@
           </div>
         </div>
 
-        <div class="table-container">
-          <table id="table-registros-declarados">
-            <thead>
-              <tr>
-                <th>Inicio</th>
-                <th>Fin</th>
-                <th>Días</th>
-                <th>IBC (COP)</th>
-                <th>Empleador / Concepto</th>
-                <th>Origen</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <!-- PANEL DE BLOQUEOS Y ERRORES DE VALIDACIÓN -->
+        <div id="review-validation-errors-box" style="display:none; margin-top: 1rem;" class="alert alert-danger"></div>
 
         <div class="nav-buttons">
-          <button class="btn btn-outline" onclick="goToStep(1)">← Cargar otro PDF</button>
-          <button class="btn btn-primary" onclick="confirmReviewAndEvaluate()">Confirmar Datos y Evaluar Transición →</button>
+          <button class="btn btn-outline" onclick="goToStep(2)">← Volver a Datos del Afiliado</button>
+          <button class="btn btn-primary" id="btn-confirm-periods-to-transition" onclick="confirmPeriodsAndEvaluateTransition()">Confirmar Períodos y Evaluar Transición →</button>
         </div>
       </div>
     </div>
 
-    <!-- STEP 3: EVALUACION DE TRANSICION -->
-    <div class="step-panel" id="step-panel-3" style="display:none;">
+    <!-- STEP 4: EVALUACION DE TRANSICION -->
+    <div class="step-panel" id="step-panel-4" style="display:none;">
       <div class="card">
         <div class="card-title">Dictamen de Conservación de Régimen de Transición (Ley 100 de 1993)</div>
         <div id="transition-result-banner"></div>
@@ -705,14 +760,14 @@
         <div class="alert alert-info" id="trans-legal-notes"></div>
 
         <div class="nav-buttons">
-          <button class="btn btn-outline" onclick="goToStep(2)">← Modificar Declaración</button>
-          <button class="btn btn-primary" id="btn-to-step-4" style="display:none;" onclick="goToStep(4)">Configurar Escenarios de Proyección →</button>
+          <button class="btn btn-outline" onclick="goToStep(3)">← Revisar Períodos y Semanas</button>
+          <button class="btn btn-primary" id="btn-to-step-4" style="display:none;" onclick="goToStep(5)">Configurar Escenarios de Proyección →</button>
         </div>
       </div>
     </div>
 
-    <!-- STEP 4: CONFIGURACION DE ESCENARIOS MULTIPLES -->
-    <div class="step-panel" id="step-panel-4" style="display:none;">
+    <!-- STEP 5: CONFIGURACION DE ESCENARIOS MULTIPLES -->
+    <div class="step-panel" id="step-panel-5" style="display:none;">
       <div class="card">
         <div class="card-title">
           <span>Configuración de Escenarios de Proyección</span>
@@ -725,18 +780,18 @@
         <div id="escenarios-container"></div>
 
         <div class="nav-buttons">
-          <button class="btn btn-outline" onclick="goToStep(3)">← Volver a Transición</button>
+          <button class="btn btn-outline" onclick="goToStep(4)">← Volver a Transición</button>
           <button id="btn-run-simulation" class="btn btn-primary" onclick="runSimulation()">Ejecutar Simulación y Ver Comparativa →</button>
         </div>
       </div>
     </div>
 
-    <!-- STEP 5: RESULTADOS Y COMPARATIVA -->
-    <div class="step-panel" id="step-panel-5" style="display:none;">
+    <!-- STEP 6: RESULTADOS Y COMPARATIVA -->
+    <div class="step-panel" id="step-panel-6" style="display:none;">
       <div id="simulation-output"></div>
 
       <div class="nav-buttons" style="margin-top: 2rem;">
-        <button class="btn btn-outline" onclick="goToStep(4)">← Modificar Escenarios</button>
+        <button class="btn btn-outline" onclick="goToStep(5)">← Modificar Escenarios</button>
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
           <button class="btn btn-secondary" onclick="openAuditModal()">🔍 Ver Auditoría de Cálculos</button>
           <button class="btn btn-secondary" onclick="exportResultsJSON()">💾 Exportar JSON</button>
@@ -744,6 +799,95 @@
         </div>
       </div>
     </div>
+
+  </div>
+
+  <!-- MODAL: EDIT RECORD -->
+  <div class="modal" id="edit-record-modal">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--primary);">✏️ Modificar Registro de Cotización</h3>
+        <button class="modal-close" onclick="closeEditRecordModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Al modificar un registro, el cambio queda etiquetado como <strong>CORRECCION_MANUAL</strong> y no se presenta como certificación oficial de Colpensiones. El valor original se conserva inmutable en la auditoría.
+      </p>
+
+      <!-- Original values comparison box -->
+      <div style="background: #f1f5f9; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem;">
+        <strong style="color: var(--text-muted);">Valores Originales Extraídos:</strong>
+        <div id="edit-modal-original-summary" style="margin-top: 4px; color: #334155;"></div>
+      </div>
+
+      <input type="hidden" id="edit-modal-record-id">
+
+      <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+        <div class="form-group">
+          <label>Fecha Inicio: *</label>
+          <input type="date" class="form-control" id="edit-modal-inicio" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Fecha Fin: *</label>
+          <input type="date" class="form-control" id="edit-modal-fin" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Días Cotizados: *</label>
+          <input type="number" class="form-control" id="edit-modal-dias" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Días Reportados:</label>
+          <input type="number" class="form-control" id="edit-modal-dias-rep" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>IBC (COP): *</label>
+          <input type="number" class="form-control" id="edit-modal-ibc" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Aportante / Razón Social: *</label>
+          <input type="text" class="form-control" id="edit-modal-aportante" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label style="color: #b45309; font-weight: 700;">Motivo de la Corrección: *</label>
+          <input type="text" class="form-control" id="edit-modal-motivo" placeholder="Indique la justificación (ej. Corrección de fecha según certificado de empresa)" oninput="validateEditModalInputs()">
+        </div>
+      </div>
+
+      <!-- Real-time validation warning inside modal -->
+      <div id="edit-modal-error-box" style="display:none; margin-top: 0.75rem;" class="alert alert-danger"></div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.25rem;">
+        <button class="btn btn-outline" onclick="closeEditRecordModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-record-edit" onclick="saveRecordEdit()">Guardar Corrección</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXCLUDE RECORD -->
+  <div class="modal" id="exclude-record-modal">
+    <div class="modal-box" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--danger);">🚫 Excluir Período del Cálculo</h3>
+        <button class="modal-close" onclick="closeExcludeRecordModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        El registro seleccionado no sumará días ni semanas para la evaluación de transición ni afectará el cálculo del IBL y la mesada.
+      </p>
+
+      <div id="exclude-modal-record-info" style="background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.82rem;"></div>
+
+      <input type="hidden" id="exclude-modal-record-id">
+
+      <div class="form-group">
+        <label style="color: #b45309; font-weight: 700;">Motivo de la Exclusión: *</label>
+        <textarea id="exclude-modal-motivo" class="form-control" rows="3" placeholder="Ej. Aporte superpuesto en régimen privado o no reconocido judicialmente..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.25rem;">
+        <button class="btn btn-outline" onclick="closeExcludeRecordModal()">Cancelar</button>
+        <button class="btn btn-primary" style="background: var(--danger); border-color: var(--danger);" onclick="confirmExcludeRecord()">Confirmar Exclusión</button>
+      </div>
+    </div>
+  </div>
 
   </div>
 
@@ -886,7 +1030,7 @@
       { id: "esc_opt", nombre: "Escenario 2 (Optimista)", ibc: 5000000, crec: 6.0, inf: 4.0, smlmv: 5.5, pausas: [] }
     ];
 
-    // Stepper navigation
+    // Stepper navigation (6 steps)
     function goToStep(step) {
       if (step > 2 && !laborHistory) {
         alert("Por favor cargue primero un archivo de historia laboral.");
@@ -894,18 +1038,66 @@
       }
       currentStep = step;
       document.querySelectorAll('.step-panel').forEach(p => p.style.display = 'none');
-      document.getElementById(`step-panel-${step}`).style.display = 'block';
+      const panel = document.getElementById(`step-panel-${step}`);
+      if (panel) panel.style.display = 'block';
 
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 6; i++) {
         const item = document.getElementById(`step-nav-${i}`);
-        item.classList.remove('active', 'completed');
-        if (i < step) item.classList.add('completed');
-        if (i === step) item.classList.add('active');
+        if (item) {
+          item.classList.remove('active', 'completed');
+          if (i < step) item.classList.add('completed');
+          if (i === step) item.classList.add('active');
+        }
       }
-      if (step === 4) {
+      if (step === 3) {
+        updateReconciliationView();
+        renderDetailTables();
+      } else if (step === 5) {
         renderScenarioCards();
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Register field corrections in audit trail
+    async function registerFieldCorrection(fieldName, originalVal, newVal, reason, provenance) {
+      if (!currentExecutionId) return;
+      try {
+        await fetch('/api/audit/correction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            execution_id: currentExecutionId,
+            target_field: fieldName,
+            original_value: originalVal,
+            corrected_value: newVal,
+            reason: reason || "Modificación manual en formulario de revisión",
+            provenance: provenance || "DECLARACION_USUARIO"
+          })
+        });
+      } catch (err) {
+        console.warn("No se pudo registrar la corrección en auditoría:", err);
+      }
+    }
+
+    // Invalidate downstream calculations when labor history or records change
+    function invalidateDownstreamCalculations() {
+      if (laborHistory) {
+        laborHistory.revision_version = (laborHistory.revision_version || 1) + 1;
+        laborHistory.revision_id = 'rev_' + Date.now();
+      }
+      // Reset transition step UI
+      const banner = document.getElementById('transition-result-banner');
+      if (banner) {
+        banner.className = '';
+        banner.innerHTML = '';
+      }
+      const btnToStep4 = document.getElementById('btn-to-step-4');
+      if (btnToStep4) btnToStep4.style.display = 'none';
+
+      // Reset simulations
+      simulationResults = [];
+      const simOut = document.getElementById('simulation-output');
+      if (simOut) simOut.innerHTML = '';
     }
 
     // Drag and drop handlers
@@ -952,6 +1144,16 @@
         }
 
         laborHistory = res.data;
+        // Ensure record_id on all records
+        (laborHistory.registros || []).forEach((r, idx) => {
+          if (!r.record_id) r.record_id = `rec_${idx}_${Date.now()}`;
+          if (r.excluido_del_calculo === undefined) r.excluido_del_calculo = false;
+          if (!r.estado_validacion) r.estado_validacion = 'VALIDO';
+        });
+        if (!laborHistory.original_registros) {
+          laborHistory.original_registros = JSON.parse(JSON.stringify(laborHistory.registros || []));
+        }
+
         currentExecutionId = res.report.execution_id;
         statusDiv.innerHTML = `<div class="alert alert-success">Documento procesado con éxito. Se identificaron ${res.report.records_extracted} registros de cotización en ${res.report.pages_processed} páginas.</div>`;
 
@@ -1017,6 +1219,7 @@
 
     function onFieldUserChange(fieldId) {
       setFieldBadge(fieldId, 'CORREGIDO_USUARIO', 'Modificado manualmente por el usuario');
+      invalidateDownstreamCalculations();
       if (fieldId === 'fecha-nac') {
         document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-nac').value);
       } else if (fieldId === 'fecha-corte') {
@@ -1076,212 +1279,9 @@
       setFieldBadge('semanas-resumen', h.semanas_resumen_colpensiones > 0 ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
       setFieldBadge('ultimo-periodo', h.ultimo_periodo_cotizado ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
       setFieldBadge('sexo', h.sexo ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
-
-      // Populate Summary Table if present
-      const resSec = document.getElementById('section-resumen-empleador');
-      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
-      resTbody.innerHTML = '';
-      const summaryList = h.resumen_empleadores || [];
-      if (summaryList.length > 0) {
-        resSec.style.display = 'block';
-        summaryList.forEach(r => {
-          const tr = document.createElement('tr');
-          const tdNit = document.createElement('td'); tdNit.textContent = r.nit || '-';
-          const tdNom = document.createElement('td'); tdNom.textContent = r.nombre_aportante || 'EMPLEADOR';
-          const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
-          const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
-          const tdSal = document.createElement('td'); tdSal.textContent = '$' + Number(r.ultimo_salario || 0).toLocaleString('es-CO');
-          const tdSem = document.createElement('td'); tdSem.textContent = Number(r.semanas || 0).toFixed(2);
-          const tdLic = document.createElement('td'); tdLic.textContent = Number(r.licencias || 0).toFixed(2);
-          const tdSim = document.createElement('td'); tdSim.textContent = Number(r.simultaneidad || 0).toFixed(2);
-          const tdTot = document.createElement('td'); tdTot.textContent = Number(r.total_semanas || 0).toFixed(2);
-          tdTot.style.fontWeight = '700';
-
-          tr.append(tdNit, tdNom, tdIni, tdFin, tdSal, tdSem, tdLic, tdSim, tdTot);
-          resTbody.appendChild(tr);
-        });
-
-        // Banner if detail table is empty
-        const bannerResumen = document.getElementById('banner-resumen-only');
-        if (!h.registros || h.registros.length === 0) {
-          bannerResumen.style.display = 'block';
-        } else {
-          bannerResumen.style.display = 'none';
-        }
-      } else {
-        resSec.style.display = 'none';
-      }
-
-      // Populate Dual Detail Tables
-      renderDetailTables(h.registros || []);
     }
 
-    function renderDetailTables(records) {
-      const recordsList = records || [];
-      const pdfRecords = recordsList.filter(r => r.origen !== 'DECLARACION_USUARIO');
-      const declaredRecords = recordsList.filter(r => r.origen === 'DECLARACION_USUARIO');
-
-      // Table 1: PDF Records (Immutable)
-      const tbodyPdf = document.querySelector('#table-registros tbody');
-      tbodyPdf.innerHTML = '';
-      if (pdfRecords.length === 0) {
-        const trEmpty = document.createElement('tr');
-        const tdEmpty = document.createElement('td');
-        tdEmpty.colSpan = 6;
-        tdEmpty.style.textAlign = 'center';
-        tdEmpty.style.padding = '1.5rem';
-        tdEmpty.style.color = 'var(--text-muted)';
-        tdEmpty.textContent = 'No se detectaron registros de cotización mensual detallada en el PDF.';
-        trEmpty.appendChild(tdEmpty);
-        tbodyPdf.appendChild(trEmpty);
-      } else {
-        pdfRecords.forEach(r => {
-          const tr = document.createElement('tr');
-          const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
-          const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
-          const tdDias = document.createElement('td'); tdDias.textContent = String(r.dias_cotizados || 0);
-          const tdIbc = document.createElement('td'); tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
-          const tdAportante = document.createElement('td'); tdAportante.textContent = r.aportante || 'EMPLEADOR REPORTADO';
-          const tdOrigen = document.createElement('td');
-          const badge = document.createElement('span');
-          badge.className = 'badge badge-success';
-          badge.textContent = r.origen || 'PDF';
-          tdOrigen.appendChild(badge);
-
-          tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen);
-          tbodyPdf.appendChild(tr);
-        });
-      }
-
-      // Table 2: User Declared Records (Editable)
-      const tbodyDecl = document.querySelector('#table-registros-declarados tbody');
-      if (tbodyDecl) {
-        tbodyDecl.innerHTML = '';
-        if (declaredRecords.length === 0) {
-          const trEmpty = document.createElement('tr');
-          const tdEmpty = document.createElement('td');
-          tdEmpty.colSpan = 7;
-          tdEmpty.style.textAlign = 'center';
-          tdEmpty.style.padding = '1rem';
-          tdEmpty.style.color = 'var(--text-muted)';
-          tdEmpty.textContent = 'No se han declarado períodos adicionales por el usuario.';
-          trEmpty.appendChild(tdEmpty);
-          tbodyDecl.appendChild(trEmpty);
-        } else {
-          declaredRecords.forEach((r, idx) => {
-            const tr = document.createElement('tr');
-            const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
-            const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
-            const tdDias = document.createElement('td'); tdDias.textContent = String(r.dias_cotizados || 0);
-            const tdIbc = document.createElement('td'); tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
-            const tdAportante = document.createElement('td'); tdAportante.textContent = r.aportante || 'APORTANTE DECLARADO';
-            const tdOrigen = document.createElement('td');
-            const badge = document.createElement('span');
-            badge.className = 'badge badge-warning';
-            badge.textContent = 'DECLARACION_USUARIO';
-            tdOrigen.appendChild(badge);
-            const tdAction = document.createElement('td');
-            const btnDel = document.createElement('button');
-            btnDel.className = 'btn btn-outline btn-sm';
-            btnDel.style.color = 'var(--danger)';
-            btnDel.style.padding = '0.2rem 0.5rem';
-            btnDel.textContent = 'Eliminar';
-            btnDel.onclick = () => removeDeclaredPeriod(idx);
-            tdAction.appendChild(btnDel);
-
-            tr.append(tdIni, tdFin, tdDias, tdIbc, tdAportante, tdOrigen, tdAction);
-            tbodyDecl.appendChild(tr);
-          });
-        }
-      }
-    }
-
-    async function addDeclaredPeriod() {
-      const ini = document.getElementById('decl-inicio').value;
-      const fin = document.getElementById('decl-fin').value;
-      const dias = parseInt(document.getElementById('decl-dias').value, 10) || 30;
-      const ibc = parseFloat(document.getElementById('decl-ibc').value) || 0;
-      const aportante = document.getElementById('decl-aportante').value || 'APORTANTE DECLARADO';
-
-      if (!ini || !fin) {
-        alert("Por favor ingrese las fechas de inicio y fin del período declarado.");
-        return;
-      }
-      if (ibc <= 0) {
-        alert("Por favor ingrese un IBC mayor a 0 para el período declarado.");
-        return;
-      }
-
-      const newRec = {
-        periodo_inicio: ini,
-        periodo_fin: fin,
-        dias_reportados: dias,
-        dias_cotizados: dias,
-        ibc: ibc,
-        aportante: aportante,
-        origen: 'DECLARACION_USUARIO'
-      };
-
-      if (!laborHistory.registros) laborHistory.registros = [];
-      laborHistory.registros.push(newRec);
-
-      document.getElementById('decl-inicio').value = '';
-      document.getElementById('decl-fin').value = '';
-      document.getElementById('decl-dias').value = '';
-      document.getElementById('decl-ibc').value = '';
-      document.getElementById('decl-aportante').value = '';
-
-      renderDetailTables(laborHistory.registros);
-
-      registerFieldCorrection(
-        `periodo_declarado_${ini}_${fin}`,
-        null,
-        `${dias} días, IBC $${ibc} COP, ${aportante}`,
-        "Inclusión de período declarado por el usuario",
-        "DECLARACION_USUARIO"
-      );
-    }
-
-    async function removeDeclaredPeriod(declaredIndex) {
-      const declaredRecords = (laborHistory.registros || []).filter(r => r.origen === 'DECLARACION_USUARIO');
-      const targetRec = declaredRecords[declaredIndex];
-      if (!targetRec) return;
-
-      const actualIdx = laborHistory.registros.indexOf(targetRec);
-      if (actualIdx !== -1) {
-        laborHistory.registros.splice(actualIdx, 1);
-        renderDetailTables(laborHistory.registros);
-        registerFieldCorrection(
-          `periodo_declarado_${targetRec.periodo_inicio}_${targetRec.periodo_fin}`,
-          `${targetRec.dias_cotizados} días, IBC $${targetRec.ibc}`,
-          null,
-          "Eliminación de período declarado por el usuario",
-          "DECLARACION_USUARIO"
-        );
-      }
-    }
-
-    async function registerFieldCorrection(fieldName, originalVal, newVal, reason, provenance) {
-      if (!currentExecutionId) return;
-      try {
-        await fetch('/api/audit/correction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            execution_id: currentExecutionId,
-            target_field: fieldName,
-            original_value: originalVal,
-            corrected_value: newVal,
-            reason: reason || "Modificación manual en formulario de revisión",
-            provenance: provenance || "DECLARACION_USUARIO"
-          })
-        });
-      } catch (err) {
-        console.warn("No se pudo registrar la corrección en auditoría:", err);
-      }
-    }
-
-    async function confirmReviewAndEvaluate() {
+    async function validateAndGoToReviewPeriods() {
       const fNac = document.getElementById('rev-fecha-nac').value;
       const sexo = document.getElementById('rev-sexo').value;
       if (!fNac) {
@@ -1308,7 +1308,7 @@
       laborHistory.aportes_posteriores_estado = document.getElementById('rev-aportes-posteriores').value;
       laborHistory.periodos_desconocidos_o_faltantes = document.getElementById('rev-faltantes').value === "true";
 
-      // Register all field modifications in audit trail
+      // Register general field changes in audit if changed
       if (currentExecutionId && originalExtractedHistory) {
         const fieldsToCompare = [
           { field: 'fecha_nacimiento', label: 'Fecha de Nacimiento' },
@@ -1331,26 +1331,664 @@
               item.field,
               origVal,
               newVal,
-              `Modificación en formulario de revisión: ${item.label}`,
+              `Modificación en datos de afiliado: ${item.label}`,
               "DECLARACION_USUARIO"
             );
           }
         }
       }
 
-      // Call transition evaluation API
+      goToStep(3);
+    }
+
+    // Detail filtering state
+    let activeDetailFilter = 'ALL';
+
+    function filterDetailRecords(filterType) {
+      if (filterType) {
+        activeDetailFilter = filterType;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById(`filter-btn-${filterType.toLowerCase()}`);
+        if (btn) btn.classList.add('active');
+      }
+      renderDetailTables();
+    }
+
+    function renderDetailTables() {
+      if (!laborHistory) return;
+
+      // 1. Render Summary Table (Table 1)
+      const resSec = document.getElementById('section-resumen-empleador');
+      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+      if (resTbody) {
+        resTbody.innerHTML = '';
+        const summaryList = laborHistory.resumen_empleadores || [];
+        if (summaryList.length > 0) {
+          if (resSec) resSec.style.display = 'block';
+          summaryList.forEach(r => {
+            const tr = document.createElement('tr');
+            const tdNom = document.createElement('td'); tdNom.textContent = r.nombre_aportante || 'EMPLEADOR';
+            const tdNit = document.createElement('td'); tdNit.textContent = r.nit || '-';
+            const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
+            const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
+            const tdSal = document.createElement('td'); tdSal.textContent = '$' + Number(r.ultimo_salario || 0).toLocaleString('es-CO');
+            const tdSem = document.createElement('td'); tdSem.textContent = Number(r.semanas || 0).toFixed(2);
+            const tdLic = document.createElement('td'); tdLic.textContent = Number(r.licencias || 0).toFixed(2);
+            const tdSim = document.createElement('td'); tdSim.textContent = Number(r.simultaneidad || 0).toFixed(2);
+            const tdTot = document.createElement('td'); tdTot.textContent = Number(r.total_semanas || 0).toFixed(2);
+            tdTot.style.fontWeight = '700';
+
+            tr.append(tdNom, tdNit, tdIni, tdFin, tdSal, tdSem, tdLic, tdSim, tdTot);
+            resTbody.appendChild(tr);
+          });
+        } else {
+          if (resSec) resSec.style.display = 'none';
+        }
+      }
+
+      // 2. Render Detail Table (Table 2)
+      const tbody = document.querySelector('#table-registros tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const allRecords = laborHistory.registros || [];
+      const searchText = (document.getElementById('search-detail-records')?.value || '').toLowerCase().trim();
+
+      // Counts for filter badges
+      let cAll = allRecords.length;
+      let cValid = 0;
+      let cCorrected = 0;
+      let cExcluded = 0;
+      let cDeclared = 0;
+      let cWarnings = 0;
+
+      allRecords.forEach(r => {
+        if (r.excluido_del_calculo) cExcluded++;
+        else if (r.origen === 'DECLARACION_USUARIO') cDeclared++;
+        else if (r.origen === 'CORRECCION_MANUAL' || r.estado_validacion === 'CORREGIDO') cCorrected++;
+        else cValid++;
+
+        if (r.estado_validacion === 'ADVERTENCIA' || r.estado_validacion === 'INCONSISTENCIA') cWarnings++;
+      });
+
+      const setBadgeCount = (id, count) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = count;
+      };
+      setBadgeCount('count-filter-all', cAll);
+      setBadgeCount('count-filter-valid', cValid);
+      setBadgeCount('count-filter-corrected', cCorrected);
+      setBadgeCount('count-filter-excluded', cExcluded);
+      setBadgeCount('count-filter-declared', cDeclared);
+      setBadgeCount('count-filter-warnings', cWarnings);
+
+      // Filtered records
+      const filtered = allRecords.filter(r => {
+        if (activeDetailFilter === 'VALID' && (r.excluido_del_calculo || r.origen === 'CORRECCION_MANUAL' || r.origen === 'DECLARACION_USUARIO')) return false;
+        if (activeDetailFilter === 'CORRECTED' && (r.origen !== 'CORRECCION_MANUAL' && r.estado_validacion !== 'CORREGIDO')) return false;
+        if (activeDetailFilter === 'EXCLUDED' && !r.excluido_del_calculo) return false;
+        if (activeDetailFilter === 'DECLARED' && r.origen !== 'DECLARACION_USUARIO') return false;
+        if (activeDetailFilter === 'WARNINGS' && r.estado_validacion !== 'ADVERTENCIA' && r.estado_validacion !== 'INCONSISTENCIA') return false;
+
+        if (searchText) {
+          const matchAportante = (r.aportante || '').toLowerCase().includes(searchText);
+          const matchIni = (r.periodo_inicio || '').includes(searchText);
+          const matchFin = (r.periodo_fin || '').includes(searchText);
+          if (!matchAportante && !matchIni && !matchFin) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        const trEmpty = document.createElement('tr');
+        const tdEmpty = document.createElement('td');
+        tdEmpty.colSpan = 9;
+        tdEmpty.style.textAlign = 'center';
+        tdEmpty.style.padding = '1.5rem';
+        tdEmpty.style.color = 'var(--text-muted)';
+        tdEmpty.textContent = 'No hay registros que coincidan con el filtro seleccionado.';
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+        return;
+      }
+
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        if (r.excluido_del_calculo) {
+          tr.className = 'row-excluded';
+        }
+
+        // Pág
+        const tdPag = document.createElement('td');
+        tdPag.textContent = r.numero_pagina || '-';
+        tdPag.style.fontSize = '0.75rem';
+        tdPag.style.color = 'var(--text-muted)';
+
+        // Período
+        const tdPer = document.createElement('td');
+        tdPer.innerHTML = `<strong>${escapeHTML(r.periodo_inicio)}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">al ${escapeHTML(r.periodo_fin)}</span>`;
+
+        // Días Rep
+        const tdDiasRep = document.createElement('td');
+        tdDiasRep.textContent = r.dias_reportados !== undefined ? r.dias_reportados : r.dias_cotizados;
+
+        // Días Rec
+        const tdDiasRec = document.createElement('td');
+        tdDiasRec.innerHTML = `<strong>${r.dias_cotizados}</strong>`;
+
+        // IBC
+        const tdIbc = document.createElement('td');
+        tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
+
+        // Aportante
+        const tdAportante = document.createElement('td');
+        tdAportante.textContent = r.aportante || 'NO INFORMADO';
+
+        // Procedencia Badge
+        const tdOrigen = document.createElement('td');
+        const badgeOrigen = document.createElement('span');
+        if (r.origen === 'CORRECCION_MANUAL') {
+          badgeOrigen.className = 'badge badge-purple';
+          badgeOrigen.textContent = 'CORRECCIÓN';
+          badgeOrigen.title = r.motivo_correccion ? `Motivo: ${r.motivo_correccion}` : 'Corregido manualmente';
+        } else if (r.origen === 'DECLARACION_USUARIO') {
+          badgeOrigen.className = 'badge badge-warning';
+          badgeOrigen.textContent = 'DECLARADO';
+          badgeOrigen.title = r.motivo_correccion ? `Motivo: ${r.motivo_correccion}` : 'Declarado por el usuario';
+        } else {
+          badgeOrigen.className = 'badge badge-success';
+          badgeOrigen.textContent = 'PDF';
+          badgeOrigen.title = `Extraído del PDF oficial (Pág. ${r.numero_pagina || 1})`;
+        }
+        tdOrigen.appendChild(badgeOrigen);
+
+        // Estado Validación Badge
+        const tdEstado = document.createElement('td');
+        const badgeEstado = document.createElement('span');
+        if (r.excluido_del_calculo) {
+          badgeEstado.className = 'badge badge-danger';
+          badgeEstado.textContent = 'EXCLUIDO';
+          badgeEstado.title = r.motivo_exclusion || 'Excluido del cálculo';
+        } else if (r.estado_validacion === 'CORREGIDO') {
+          badgeEstado.className = 'badge badge-purple';
+          badgeEstado.textContent = 'CORREGIDO';
+        } else if (r.estado_validacion === 'ADVERTENCIA' || r.estado_validacion === 'INCONSISTENCIA') {
+          badgeEstado.className = 'badge badge-warning';
+          badgeEstado.textContent = 'ADVERTENCIA';
+        } else {
+          badgeEstado.className = 'badge badge-info';
+          badgeEstado.textContent = 'VÁLIDO';
+        }
+        tdEstado.appendChild(badgeEstado);
+
+        // Acciones
+        const tdAcciones = document.createElement('td');
+        tdAcciones.style.textAlign = 'center';
+        tdAcciones.style.whiteSpace = 'nowrap';
+
+        // Botón Editar
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn btn-outline btn-sm';
+        btnEdit.style.padding = '0.2rem 0.45rem';
+        btnEdit.style.fontSize = '0.75rem';
+        btnEdit.style.marginRight = '4px';
+        btnEdit.innerHTML = '✏️ Editar';
+        btnEdit.onclick = () => openEditRecordModal(r.record_id);
+        tdAcciones.appendChild(btnEdit);
+
+        // Botón Restaurar (si fue editado)
+        if (r.origen === 'CORRECCION_MANUAL' || r.valor_original) {
+          const btnRestore = document.createElement('button');
+          btnRestore.className = 'btn btn-outline btn-sm';
+          btnRestore.style.padding = '0.2rem 0.45rem';
+          btnRestore.style.fontSize = '0.75rem';
+          btnRestore.style.marginRight = '4px';
+          btnRestore.innerHTML = '🔄';
+          btnRestore.title = 'Restaurar valor original del PDF';
+          btnRestore.onclick = () => restoreRecordToOriginal(r.record_id);
+          tdAcciones.appendChild(btnRestore);
+        }
+
+        // Botón Excluir / Incluir
+        const btnToggleExcl = document.createElement('button');
+        btnToggleExcl.className = 'btn btn-outline btn-sm';
+        btnToggleExcl.style.padding = '0.2rem 0.45rem';
+        btnToggleExcl.style.fontSize = '0.75rem';
+        if (r.excluido_del_calculo) {
+          btnToggleExcl.style.color = 'var(--success)';
+          btnToggleExcl.innerHTML = '✔️ Incluir';
+          btnToggleExcl.onclick = () => restoreIncludedRecord(r.record_id);
+        } else {
+          btnToggleExcl.style.color = 'var(--danger)';
+          btnToggleExcl.innerHTML = '🚫 Excluir';
+          btnToggleExcl.onclick = () => openExcludeRecordModal(r.record_id);
+        }
+        tdAcciones.appendChild(btnToggleExcl);
+
+        tr.append(tdPag, tdPer, tdDiasRep, tdDiasRec, tdIbc, tdAportante, tdOrigen, tdEstado, tdAcciones);
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Modal Edit Record Logic
+    function openEditRecordModal(recordId) {
+      if (!laborHistory || !laborHistory.registros) return;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      document.getElementById('edit-modal-record-id').value = recordId;
+      document.getElementById('edit-modal-inicio').value = rec.periodo_inicio || '';
+      document.getElementById('edit-modal-fin').value = rec.periodo_fin || '';
+      document.getElementById('edit-modal-dias').value = rec.dias_cotizados || 30;
+      document.getElementById('edit-modal-dias-rep').value = rec.dias_reportados || rec.dias_cotizados || 30;
+      document.getElementById('edit-modal-ibc').value = rec.ibc || 0;
+      document.getElementById('edit-modal-aportante').value = rec.aportante || '';
+      document.getElementById('edit-modal-motivo').value = rec.motivo_correccion || '';
+
+      const orig = rec.valor_original || rec;
+      document.getElementById('edit-modal-original-summary').innerHTML = `
+        Período: <strong>${escapeHTML(orig.periodo_inicio)}</strong> al <strong>${escapeHTML(orig.periodo_fin)}</strong> |
+        Días: <strong>${orig.dias_cotizados}</strong> |
+        IBC: <strong>$${Number(orig.ibc||0).toLocaleString('es-CO')}</strong> |
+        Aportante: <em>${escapeHTML(orig.aportante||'No especificado')}</em>
+      `;
+
+      document.getElementById('edit-modal-error-box').style.display = 'none';
+      document.getElementById('btn-save-record-edit').disabled = false;
+
+      document.getElementById('edit-record-modal').classList.add('active');
+    }
+
+    function closeEditRecordModal() {
+      document.getElementById('edit-record-modal').classList.remove('active');
+    }
+
+    function validateEditModalInputs() {
+      const ini = document.getElementById('edit-modal-inicio').value;
+      const fin = document.getElementById('edit-modal-fin').value;
+      const dias = parseInt(document.getElementById('edit-modal-dias').value, 10);
+      const ibc = parseFloat(document.getElementById('edit-modal-ibc').value);
+      const motivo = document.getElementById('edit-modal-motivo').value.trim();
+      const errBox = document.getElementById('edit-modal-error-box');
+      const btnSave = document.getElementById('btn-save-record-edit');
+
+      let errors = [];
+      if (!ini || !fin) {
+        errors.push("Fechas de inicio y fin son obligatorias.");
+      } else if (ini > fin) {
+        errors.push("Fecha invertida: la fecha de inicio es posterior a la fecha de fin.");
+      } else {
+        const dIni = new Date(ini);
+        const dFin = new Date(fin);
+        const diffDays = Math.round((dFin - dIni) / (1000 * 60 * 60 * 24)) + 1;
+        if (dias > diffDays) {
+          errors.push(`Días cotizados (${dias}) incompatibles: exceden los ${diffDays} días calendario del período.`);
+        }
+      }
+
+      if (isNaN(dias) || dias < 0) {
+        errors.push("Los días no pueden ser negativos.");
+      }
+      if (isNaN(ibc) || ibc < 0) {
+        errors.push("El IBC no puede ser negativo.");
+      }
+      if (!motivo) {
+        errors.push("El motivo de la corrección es obligatorio para garantizar la trazabilidad de auditoría.");
+      }
+
+      if (errors.length > 0) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `<strong>Inconsistencias detectadas:</strong><br>${errors.join('<br>')}`;
+        btnSave.disabled = true;
+      } else {
+        errBox.style.display = 'none';
+        btnSave.disabled = false;
+      }
+    }
+
+    async function saveRecordEdit() {
+      const recordId = document.getElementById('edit-modal-record-id').value;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      const ini = document.getElementById('edit-modal-inicio').value;
+      const fin = document.getElementById('edit-modal-fin').value;
+      const dias = parseInt(document.getElementById('edit-modal-dias').value, 10);
+      const diasRep = parseInt(document.getElementById('edit-modal-dias-rep').value, 10) || dias;
+      const ibc = parseFloat(document.getElementById('edit-modal-ibc').value) || 0;
+      const aportante = document.getElementById('edit-modal-aportante').value.trim();
+      const motivo = document.getElementById('edit-modal-motivo').value.trim();
+
+      if (!motivo) {
+        alert("Por favor indique el motivo de la corrección.");
+        return;
+      }
+
+      // Preserve original if not already preserved
+      if (!rec.valor_original) {
+        rec.valor_original = {
+          periodo_inicio: rec.periodo_inicio,
+          periodo_fin: rec.periodo_fin,
+          dias_cotizados: rec.dias_cotizados,
+          dias_reportados: rec.dias_reportados,
+          ibc: rec.ibc,
+          aportante: rec.aportante
+        };
+      }
+
+      const prevSummary = `${rec.periodo_inicio} a ${rec.periodo_fin}, ${rec.dias_cotizados} días, $${rec.ibc}`;
+      rec.periodo_inicio = ini;
+      rec.periodo_fin = fin;
+      rec.dias_cotizados = dias;
+      rec.dias_reportados = diasRep;
+      rec.ibc = ibc;
+      rec.aportante = aportante;
+      rec.origen = 'CORRECCION_MANUAL';
+      rec.motivo_correccion = motivo;
+      rec.estado_validacion = 'CORREGIDO';
+
+      closeEditRecordModal();
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `registro_${recordId}`,
+        prevSummary,
+        `${ini} a ${fin}, ${dias} días, $${ibc}`,
+        motivo,
+        "CORRECCION_MANUAL"
+      );
+    }
+
+    // Modal Exclude Record Logic
+    function openExcludeRecordModal(recordId) {
+      if (!laborHistory || !laborHistory.registros) return;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      document.getElementById('exclude-modal-record-id').value = recordId;
+      document.getElementById('exclude-modal-record-info').innerHTML = `
+        <strong>Período:</strong> ${escapeHTML(rec.periodo_inicio)} al ${escapeHTML(rec.periodo_fin)}<br>
+        <strong>Días:</strong> ${rec.dias_cotizados} | <strong>IBC:</strong> $${Number(rec.ibc||0).toLocaleString('es-CO')}<br>
+        <strong>Aportante:</strong> ${escapeHTML(rec.aportante||'No especificado')}
+      `;
+      document.getElementById('exclude-modal-motivo').value = '';
+      document.getElementById('exclude-record-modal').classList.add('active');
+    }
+
+    function closeExcludeRecordModal() {
+      document.getElementById('exclude-record-modal').classList.remove('active');
+    }
+
+    async function confirmExcludeRecord() {
+      const recordId = document.getElementById('exclude-modal-record-id').value;
+      const motivo = document.getElementById('exclude-modal-motivo').value.trim();
+      if (!motivo) {
+        alert("Por favor indique el motivo de la exclusión.");
+        return;
+      }
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      rec.excluido_del_calculo = true;
+      rec.motivo_exclusion = motivo;
+      rec.estado_validacion = 'EXCLUIDO';
+
+      closeExcludeRecordModal();
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `exclusion_registro_${recordId}`,
+        "INCLUIDO",
+        "EXCLUIDO",
+        motivo,
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    async function restoreIncludedRecord(recordId) {
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      rec.excluido_del_calculo = false;
+      rec.motivo_exclusion = '';
+      rec.estado_validacion = rec.origen === 'CORRECCION_MANUAL' ? 'CORREGIDO' : 'VALIDO';
+
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `exclusion_registro_${recordId}`,
+        "EXCLUIDO",
+        "INCLUIDO",
+        "Restauración de registro incluido por el usuario",
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    async function restoreRecordToOriginal(recordId) {
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      let orig = rec.valor_original;
+      if (!orig && laborHistory.original_registros) {
+        orig = laborHistory.original_registros.find(r => r.record_id === recordId);
+      }
+      if (!orig) return;
+
+      rec.periodo_inicio = orig.periodo_inicio;
+      rec.periodo_fin = orig.periodo_fin;
+      rec.dias_cotizados = orig.dias_cotizados;
+      rec.dias_reportados = orig.dias_reportados;
+      rec.ibc = orig.ibc;
+      rec.aportante = orig.aportante;
+      rec.origen = 'EXTRAIDO_PDF';
+      rec.valor_original = null;
+      rec.motivo_correccion = '';
+      rec.estado_validacion = 'VALIDO';
+
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `restauracion_${recordId}`,
+        "MODIFICADO",
+        "ORIGINAL_PDF",
+        "Restauración a valores originales del documento",
+        "EXTRAIDO_PDF"
+      );
+    }
+
+    // Add declared period
+    async function addDeclaredPeriod() {
+      const ini = document.getElementById('decl-inicio').value;
+      const fin = document.getElementById('decl-fin').value;
+      const dias = parseInt(document.getElementById('decl-dias').value, 10) || 30;
+      const ibc = parseFloat(document.getElementById('decl-ibc').value) || 0;
+      const aportante = document.getElementById('decl-aportante').value || 'APORTANTE DECLARADO';
+      const motivo = document.getElementById('decl-motivo').value.trim();
+
+      if (!ini || !fin) {
+        alert("Por favor ingrese las fechas de inicio y fin del período declarado.");
+        return;
+      }
+      if (ini > fin) {
+        alert("La fecha de inicio no puede ser posterior a la fecha de fin.");
+        return;
+      }
+      if (ibc <= 0) {
+        alert("Por favor ingrese un IBC mayor a 0 para el período declarado.");
+        return;
+      }
+      if (!motivo) {
+        alert("Por favor ingrese el motivo o justificación del período declarado.");
+        return;
+      }
+
+      const newRec = {
+        record_id: `decl_${Date.now()}`,
+        periodo_inicio: ini,
+        periodo_fin: fin,
+        dias_reportados: dias,
+        dias_cotizados: dias,
+        ibc: ibc,
+        aportante: aportante,
+        origen: 'DECLARACION_USUARIO',
+        motivo_correccion: motivo,
+        excluido_del_calculo: false,
+        estado_validacion: 'DECLARADO',
+        numero_pagina: null
+      };
+
+      if (!laborHistory.registros) laborHistory.registros = [];
+      laborHistory.registros.push(newRec);
+
+      document.getElementById('decl-inicio').value = '';
+      document.getElementById('decl-fin').value = '';
+      document.getElementById('decl-dias').value = '';
+      document.getElementById('decl-ibc').value = '';
+      document.getElementById('decl-aportante').value = '';
+      document.getElementById('decl-motivo').value = '';
+
+      invalidateDownstreamCalculations();
+      await updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `periodo_declarado_${ini}_${fin}`,
+        null,
+        `${dias} días, IBC $${ibc} COP, ${aportante}`,
+        motivo,
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    // Reconciliation Summary View
+    async function updateReconciliationView() {
+      if (!laborHistory) return;
+
       try {
-        const q = currentExecutionId ? `?execution_id=${currentExecutionId}` : '';
-        const resp = await fetch(`/api/evaluate-transition${q}`, {
+        const resp = await fetch('/api/review/reconcile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(laborHistory)
         });
-        const evalRes = await resp.json();
-        renderTransitionResult(evalRes);
-        goToStep(3);
+        const recData = await resp.json();
+
+        const semPdf = recData.semanas_reconocidas_pdf !== undefined ? recData.semanas_reconocidas_pdf : (recData.semanas_resumen_pdf || laborHistory.semanas_resumen_colpensiones || 0);
+        document.getElementById('recon-kpi-pdf').textContent = Number(semPdf).toFixed(2);
+        const semDet = recData.semanas_recalculadas_detalle !== undefined ? recData.semanas_recalculadas_detalle : (recData.semanas_detalle_recalculadas || 0);
+        document.getElementById('recon-kpi-detalle').textContent = Number(semDet).toFixed(2);
+        const semDecl = recData.semanas_declaradas_adicionales !== undefined ? recData.semanas_declaradas_adicionales : 0;
+        document.getElementById('recon-kpi-declaradas').textContent = Number(semDecl).toFixed(2);
+        const semAct = recData.semanas_totales_activas !== undefined ? recData.semanas_totales_activas : 0;
+        document.getElementById('recon-kpi-activas').textContent = Number(semAct).toFixed(2);
+
+        const banner = document.getElementById('recon-discrepancia-banner');
+        if (banner) {
+          let html = '';
+          const diff = Math.abs(recData.diferencia_detalle_vs_reconocidas !== undefined ? recData.diferencia_detalle_vs_reconocidas : (recData.diferencia_resumen_vs_detalle || 0));
+
+          if (recData.discrepancias_detectadas && recData.discrepancias_detectadas.length > 0) {
+            html += `
+              <div class="alert alert-warning" style="margin-bottom: 0.75rem;">
+                <strong>⚠️ Discrepancias y Asuntos Pendientes Identificados:</strong>
+                <ul style="margin-top: 4px; padding-left: 1.25rem;">
+                  ${recData.discrepancias_detectadas.map(d => `<li>${escapeHTML(d)}</li>`).join('')}
+                </ul>
+                <div style="font-size: 0.8rem; margin-top: 6px; color: #92400e;">
+                  <strong>Regla de Consistencia:</strong> El motor no resuelve discrepancias eligiendo automáticamente el valor mayor.
+                  Las cotizaciones detalladas del historial sustentan la liquidación mes a mes.
+                </div>
+              </div>
+            `;
+          } else if (diff > 0.05) {
+            html += `
+              <div class="alert alert-info" style="margin-bottom: 0.75rem;">
+                ℹ️ <strong>Diferencia de Conciliación:</strong> Existe una diferencia de <strong>${diff.toFixed(2)} semanas</strong> entre el total consolidado en el resumen del reporte y la suma del detalle mensual.
+                Los cálculos pensionales toman como base los períodos detallados verificables.
+              </div>
+            `;
+          } else {
+            html += `
+              <div class="alert alert-success" style="margin-bottom: 0.75rem;">
+                ✓ <strong>Conciliación Consistente:</strong> El total de semanas del resumen coincide con la relación detallada de cotizaciones.
+              </div>
+            `;
+          }
+
+          if (recData.asuntos_pendientes && recData.asuntos_pendientes.length > 0) {
+            html += `
+              <div class="alert alert-info" style="margin-bottom: 0;">
+                <strong>📋 Observaciones de la Historia Laboral:</strong>
+                <ul style="margin-top: 4px; padding-left: 1.25rem;">
+                  ${recData.asuntos_pendientes.map(a => `<li>${escapeHTML(a)}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          banner.innerHTML = html;
+        }
+
       } catch (err) {
-        alert("Error al evaluar transición: " + err.message);
+        console.warn("Error en conciliación:", err);
+      }
+    }
+
+    // Confirm Periods and Evaluate Transition
+    async function confirmPeriodsAndEvaluateTransition() {
+      const errBox = document.getElementById('review-validation-errors-box');
+      errBox.style.display = 'none';
+
+      // 1. Save revision and validate on backend
+      try {
+        const revResp = await fetch('/api/review/save-revision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            historia: laborHistory,
+            motivo: "Confirmación en pantalla de revisión de períodos y semanas"
+          })
+        });
+        const revData = await revResp.json();
+
+        if (!revData.success) {
+          errBox.style.display = 'block';
+          errBox.innerHTML = `
+            <strong>⛔ Existen bloqueos que impiden continuar con la simulación:</strong>
+            <ul style="margin-top: 6px; padding-left: 1.25rem;">
+              ${(revData.blocking_errors || [revData.message]).map(e => `<li>${escapeHTML(e)}</li>`).join('')}
+            </ul>
+            <p style="font-size: 0.8rem; margin-top: 6px;">Por favor corrija o excluya los períodos incompatibles antes de evaluar el régimen de transición.</p>
+          `;
+          window.scrollTo({ top: errBox.offsetTop - 50, behavior: 'smooth' });
+          return;
+        }
+
+        // Apply normalized history returned by backend
+        laborHistory = revData.historia;
+
+        // 2. Evaluate Transition
+        const q = currentExecutionId ? `?execution_id=${currentExecutionId}` : '';
+        const evalResp = await fetch(`/api/evaluate-transition${q}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(laborHistory)
+        });
+        const evalRes = await evalResp.json();
+
+        renderTransitionResult(evalRes);
+        goToStep(4);
+
+      } catch (err) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `<strong>Error de validación:</strong> ${escapeHTML(err.message)}`;
       }
     }
 
@@ -1469,7 +2107,7 @@
         simulationResults = data.results;
         currentExecutionId = data.execution_id || currentExecutionId;
         renderSimulationResults(data.results);
-        goToStep(5);
+        goToStep(6);
       } catch (err) {
         alert("Error al simular: " + err.message);
       }
@@ -1888,6 +2526,14 @@
       if (declTbody) declTbody.innerHTML = '';
       const resSec = document.getElementById('section-resumen-empleador');
       if (resSec) resSec.style.display = 'none';
+
+      // Clear reconciliation KPIs and banner
+      const kpiPdf = document.getElementById('recon-kpi-pdf'); if (kpiPdf) kpiPdf.textContent = '0.00';
+      const kpiDet = document.getElementById('recon-kpi-detalle'); if (kpiDet) kpiDet.textContent = '0.00';
+      const kpiDec = document.getElementById('recon-kpi-declaradas'); if (kpiDec) kpiDec.textContent = '0.00';
+      const kpiAct = document.getElementById('recon-kpi-activas'); if (kpiAct) kpiAct.textContent = '0.00';
+      const reconBanner = document.getElementById('recon-discrepancia-banner'); if (reconBanner) reconBanner.innerHTML = '';
+      const revErrBox = document.getElementById('review-validation-errors-box'); if (revErrBox) revErrBox.style.display = 'none';
 
       // Clear scenario and results containers
       const resContainer = document.getElementById('simulation-output');

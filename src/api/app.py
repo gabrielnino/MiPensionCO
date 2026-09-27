@@ -55,6 +55,11 @@ from src.domain.models import (
     SexCategory,
 )
 from src.domain.pension_engine import TRANSITION_CUTOFF_DATE_C264, PensionEngine
+from src.domain.validation import (
+    reconcile_labor_history,
+    validate_cotizacion_record,
+    validate_labor_history_periods,
+)
 from src.economic.ipc import IPC_SERIES_BASE_2018
 from src.economic.smlmv import HISTORICAL_SMLMV
 from src.legal.catalog import LegalCatalog
@@ -82,6 +87,7 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 # Pydantic DTOs for API requests & responses
 class CotizacionRecordDTO(BaseModel):
+    record_id: str | None = None
     periodo_inicio: str
     periodo_fin: str
     dias_reportados: int
@@ -95,6 +101,13 @@ class CotizacionRecordDTO(BaseModel):
     origen: str = "PDF"
     pagina: int = 1
     fila: int = 1
+    dias_pendientes_validacion: bool = False
+    excluido_del_calculo: bool = False
+    motivo_exclusion: str = ""
+    motivo_correccion: str = ""
+    estado_validacion: str = "VALIDO"
+    valor_original: dict[str, Any] | None = None
+    source_fragment_ids: list[str] = []
 
 
 class ResumenEmpleadorRecordDTO(BaseModel):
@@ -131,8 +144,17 @@ class HistoriaLaboralDTO(BaseModel):
     detalle_caso_especial: str = ""
     periodos_desconocidos_o_faltantes: bool = False
     aportes_posteriores_estado: str = "DESCONOCIDO"
+    revision_version: int = 1
+    revision_id: str = "rev_initial"
     resumen_empleadores: list[ResumenEmpleadorRecordDTO] = []
     registros: list[CotizacionRecordDTO] = []
+    original_registros: list[CotizacionRecordDTO] = []
+
+
+class SaveRevisionRequestDTO(BaseModel):
+    execution_id: str = ""
+    motivo: str = "Revisión de historia laboral"
+    historia: HistoriaLaboralDTO
 
 
 class EscenarioInputDTO(BaseModel):
@@ -193,6 +215,8 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         orig_enum = ProvenanceType.PDF
         if r.origen == "DECLARACION_USUARIO":
             orig_enum = ProvenanceType.DECLARACION_USUARIO
+        elif r.origen == "CORRECCION_MANUAL":
+            orig_enum = ProvenanceType.CORRECCION_MANUAL
         elif r.origen == "SUPUESTO":
             orig_enum = ProvenanceType.SUPUESTO
 
@@ -211,6 +235,14 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
                 origen=orig_enum,
                 pagina=r.pagina,
                 fila=r.fila,
+                dias_pendientes_validacion=r.dias_pendientes_validacion,
+                source_fragment_ids=tuple(r.source_fragment_ids),
+                record_id=r.record_id or f"p{r.pagina}_f{r.fila}_{p_ini.isoformat()}",
+                excluido_del_calculo=r.excluido_del_calculo,
+                motivo_exclusion=r.motivo_exclusion,
+                motivo_correccion=r.motivo_correccion,
+                estado_validacion=r.estado_validacion,
+                valor_original=r.valor_original,
             )
         )
 
@@ -291,6 +323,123 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         registros=records,
         periodos_desconocidos_o_faltantes=dto.periodos_desconocidos_o_faltantes,
         aportes_posteriores_estado=dto.aportes_posteriores_estado,
+        revision_version=dto.revision_version,
+        revision_id=dto.revision_id,
+        original_registros=records,
+    )
+
+
+def domain_to_dto(historia: HistoriaLaboral) -> HistoriaLaboralDTO:
+    """Converts domain HistoriaLaboral model into API DTO."""
+    reg_dtos = [
+        CotizacionRecordDTO(
+            record_id=r.record_id,
+            periodo_inicio=r.periodo_inicio.isoformat(),
+            periodo_fin=r.periodo_fin.isoformat(),
+            dias_reportados=r.dias_reportados,
+            dias_cotizados=r.dias_cotizados,
+            ibc=float(r.ibc),
+            aportante=r.aportante,
+            nit=r.nit,
+            novedad=r.novedad,
+            observaciones=r.observaciones,
+            fecha_pago=r.fecha_pago.isoformat() if r.fecha_pago else None,
+            origen=r.origen.value if hasattr(r.origen, "value") else str(r.origen),
+            pagina=r.pagina,
+            fila=r.fila,
+            dias_pendientes_validacion=r.dias_pendientes_validacion,
+            excluido_del_calculo=r.excluido_del_calculo,
+            motivo_exclusion=r.motivo_exclusion,
+            motivo_correccion=r.motivo_correccion,
+            estado_validacion=r.estado_validacion,
+            valor_original=r.valor_original,
+            source_fragment_ids=list(r.source_fragment_ids),
+        )
+        for r in historia.registros
+    ]
+    res_dtos = [
+        ResumenEmpleadorRecordDTO(
+            nit=re.nit,
+            nombre_aportante=re.nombre_aportante,
+            periodo_inicio=re.periodo_inicio.isoformat(),
+            periodo_fin=re.periodo_fin.isoformat(),
+            ultimo_salario=float(re.ultimo_salario),
+            ultimo_salario_exacto=str(re.ultimo_salario),
+            semanas=float(re.semanas),
+            licencias=float(re.licencias),
+            simultaneidad=float(re.simultaneidad),
+            total_semanas=float(re.total_semanas),
+            pagina=re.pagina,
+            fila=re.fila,
+            source_fragment_ids=list(re.source_fragment_ids),
+        )
+        for re in historia.resumen_empleadores
+    ]
+    orig_dtos = [
+        CotizacionRecordDTO(
+            record_id=r.record_id,
+            periodo_inicio=r.periodo_inicio.isoformat(),
+            periodo_fin=r.periodo_fin.isoformat(),
+            dias_reportados=r.dias_reportados,
+            dias_cotizados=r.dias_cotizados,
+            ibc=float(r.ibc),
+            aportante=r.aportante,
+            nit=r.nit,
+            novedad=r.novedad,
+            observaciones=r.observaciones,
+            fecha_pago=r.fecha_pago.isoformat() if r.fecha_pago else None,
+            origen=r.origen.value if hasattr(r.origen, "value") else str(r.origen),
+            pagina=r.pagina,
+            fila=r.fila,
+            dias_pendientes_validacion=r.dias_pendientes_validacion,
+            excluido_del_calculo=r.excluido_del_calculo,
+            motivo_exclusion=r.motivo_exclusion,
+            motivo_correccion=r.motivo_correccion,
+            estado_validacion=r.estado_validacion,
+            valor_original=r.valor_original,
+            source_fragment_ids=list(r.source_fragment_ids),
+        )
+        for r in (historia.original_registros or [])
+    ]
+    return HistoriaLaboralDTO(
+        cedula_enmascarada=historia.cedula_enmascarada,
+        nombre_enmascarado=historia.nombre_enmascarado,
+        fecha_nacimiento=historia.fecha_nacimiento.isoformat()
+        if historia.fecha_nacimiento
+        else None,
+        sexo=historia.sexo.value if historia.sexo else None,
+        fecha_afiliacion_colpensiones=historia.fecha_afiliacion_colpensiones.isoformat()
+        if historia.fecha_afiliacion_colpensiones
+        else None,
+        fecha_primera_cotizacion=historia.fecha_primera_cotizacion.isoformat()
+        if historia.fecha_primera_cotizacion
+        else None,
+        fecha_expedicion_reporte=historia.fecha_expedicion_reporte.isoformat()
+        if historia.fecha_expedicion_reporte
+        else None,
+        fecha_actualizacion_reporte=historia.fecha_actualizacion_reporte.isoformat()
+        if historia.fecha_actualizacion_reporte
+        else None,
+        ultimo_periodo_cotizado=historia.ultimo_periodo_cotizado.isoformat()
+        if historia.ultimo_periodo_cotizado
+        else None,
+        estado_afiliacion=historia.estado_afiliacion.value
+        if hasattr(historia.estado_afiliacion, "value")
+        else str(historia.estado_afiliacion),
+        semanas_resumen_colpensiones=float(historia.semanas_resumen_colpensiones),
+        semanas_alto_riesgo=float(historia.semanas_alto_riesgo)
+        if historia.semanas_alto_riesgo is not None
+        else None,
+        tiempos_publicos=float(historia.tiempos_publicos),
+        es_caso_especial=historia.es_caso_especial,
+        detalle_caso_especial=historia.detalle_caso_especial,
+        periodos_desconocidos_o_faltantes=historia.periodos_desconocidos_o_faltantes,
+        aportes_posteriores_estado=historia.aportes_posteriores_estado,
+        revision_version=historia.revision_version,
+        revision_id=historia.revision_id,
+        resumen_empleadores=res_dtos,
+        registros=reg_dtos,
+        original_registros=orig_dtos,
     )
 
 
@@ -408,7 +557,148 @@ async def upload_pdf(
                 "aportes_posteriores_estado": historia.aportes_posteriores_estado,
                 "resumen_empleadores": resumen_data,
                 "registros": records_data,
+                "original_registros": records_data,
+                "revision_version": 1,
+                "revision_id": "rev_initial",
                 "field_statuses": field_statuses,
+            },
+        }
+    )
+
+
+@app.post("/api/review/validate-record")
+async def validate_record_endpoint(dto: CotizacionRecordDTO) -> JSONResponse:
+    """Validates an individual contribution record in real time."""
+    try:
+        p_ini = date.fromisoformat(dto.periodo_inicio)
+        p_fin = date.fromisoformat(dto.periodo_fin)
+    except ValueError:
+        return JSONResponse(
+            content={
+                "valid": False,
+                "issues": [
+                    {
+                        "code": "FECHAS_INVALIDAS",
+                        "message": "Formato de fechas inválido (debe ser YYYY-MM-DD).",
+                        "severity": "ERROR",
+                    }
+                ],
+            }
+        )
+    rec = CotizacionRecord(
+        periodo_inicio=p_ini,
+        periodo_fin=p_fin,
+        dias_reportados=dto.dias_reportados,
+        dias_cotizados=dto.dias_cotizados,
+        ibc=Decimal(str(dto.ibc)),
+        aportante=dto.aportante,
+        nit=dto.nit,
+        origen=ProvenanceType(dto.origen)
+        if dto.origen in ProvenanceType.__members__
+        else ProvenanceType.PDF,
+        record_id=dto.record_id or "",
+        excluido_del_calculo=dto.excluido_del_calculo,
+    )
+    issues = validate_cotizacion_record(rec)
+    has_errors = any(i["severity"] == "ERROR" for i in issues)
+    return JSONResponse(content={"valid": not has_errors, "issues": issues})
+
+
+@app.post("/api/review/reconcile")
+async def reconcile_endpoint(dto: HistoriaLaboralDTO) -> JSONResponse:
+    """Reconciles recognized summary weeks against recalculated detail and declared periods."""
+    historia = dto_to_domain(dto)
+    recon = reconcile_labor_history(historia)
+    return JSONResponse(
+        content={
+            "semanas_reconocidas_pdf": float(recon["semanas_reconocidas_pdf"]),
+            "semanas_recalculadas_detalle": float(
+                recon["semanas_recalculadas_detalle"]
+            ),
+            "semanas_declaradas_adicionales": float(
+                recon["semanas_declaradas_adicionales"]
+            ),
+            "semanas_excluidas": float(recon["semanas_excluidas"]),
+            "semanas_totales_activas": float(recon["semanas_totales_activas"]),
+            "diferencia_detalle_vs_reconocidas": float(
+                recon["diferencia_detalle_vs_reconocidas"]
+            ),
+            "tiene_discrepancia": recon["tiene_discrepancia"],
+            "conteo_registros": recon["conteo_registros"],
+            "asuntos_pendientes": recon["asuntos_pendientes"],
+            "errores_bloqueantes": recon["errores_bloqueantes"],
+            "permite_continuar": recon["permite_continuar"],
+        }
+    )
+
+
+@app.post("/api/review/save-revision")
+async def save_revision_endpoint(req: SaveRevisionRequestDTO) -> JSONResponse:
+    """Validates and saves a revised version of the labor history with audit tracking."""
+    if req.execution_id:
+        validate_execution_id(req.execution_id)
+    historia = dto_to_domain(req.historia)
+    issues = validate_labor_history_periods(historia.registros)
+    blocking_errors = [i for i in issues if i["severity"] == "ERROR"]
+    if blocking_errors:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error_message": "Existen errores de validación que impiden guardar la revisión.",
+                "issues": issues,
+            },
+        )
+
+    # Assign new revision version
+    historia.revision_version += 1
+    historia.revision_id = f"rev_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+
+    # Track corrections in AuditService
+    if req.execution_id:
+        for r in historia.registros:
+            if r.origen == ProvenanceType.CORRECCION_MANUAL and r.motivo_correccion:
+                AuditService.record_user_correction(
+                    execution_id=req.execution_id,
+                    field_name=f"registro_{r.record_id}",
+                    original_value=r.valor_original,
+                    corrected_value=r.to_dict(),
+                    reason=r.motivo_correccion,
+                    provenance="CORRECCION_MANUAL",
+                )
+            elif r.excluido_del_calculo and r.motivo_exclusion:
+                AuditService.record_user_correction(
+                    execution_id=req.execution_id,
+                    field_name=f"exclusion_{r.record_id}",
+                    original_value="INCLUIDO",
+                    corrected_value="EXCLUIDO",
+                    reason=r.motivo_exclusion,
+                    provenance="CORRECCION_MANUAL",
+                )
+
+    recon = reconcile_labor_history(historia)
+    return JSONResponse(
+        content={
+            "success": True,
+            "revision_version": historia.revision_version,
+            "revision_id": historia.revision_id,
+            "historia": domain_to_dto(historia).model_dump(),
+            "registros": [r.to_dict() for r in historia.registros],
+            "reconciliation": {
+                "semanas_reconocidas_pdf": float(recon["semanas_reconocidas_pdf"]),
+                "semanas_recalculadas_detalle": float(
+                    recon["semanas_recalculadas_detalle"]
+                ),
+                "semanas_declaradas_adicionales": float(
+                    recon["semanas_declaradas_adicionales"]
+                ),
+                "semanas_excluidas": float(recon["semanas_excluidas"]),
+                "semanas_totales_activas": float(recon["semanas_totales_activas"]),
+                "diferencia_detalle_vs_reconocidas": float(
+                    recon["diferencia_detalle_vs_reconocidas"]
+                ),
+                "tiene_discrepancia": recon["tiene_discrepancia"],
+                "asuntos_pendientes": recon["asuntos_pendientes"],
             },
         }
     )

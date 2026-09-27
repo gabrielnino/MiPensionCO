@@ -140,6 +140,8 @@ def test_playwright_e2e_full_workflow(local_server_url: str) -> None:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.on("dialog", lambda dialog: dialog.accept())
+            page.on("pageerror", lambda err: print(f"PAGE ERROR: {err}"))
+            page.on("console", lambda msg: print(f"CONSOLE [{msg.type}]: {msg.text}"))
 
             # 1. Navigate to home
             page.goto(local_server_url)
@@ -165,64 +167,67 @@ def test_playwright_e2e_full_workflow(local_server_url: str) -> None:
             # Birth date
             assert page.input_value("#rev-fecha-nac") == "1970-05-20"
 
-            # Check summary table
-            assert page.is_visible("#table-resumen-empleadores")
-            summary_rows = page.locator("#table-resumen-empleadores tbody tr")
-            assert summary_rows.count() >= 2
-
-            # Check Table 1 (PDF immutable records)
-            pdf_rows = page.locator("#table-registros tbody tr")
-            assert pdf_rows.count() >= 4
-            # First row has PDF badge
-            assert "PDF" in pdf_rows.first.inner_text()
-
-            # 4. Fill required unselected fields & Add user declared period (Hallazgo 5)
+            # 4. Fill required unselected fields in Step 2
             # Pension category (MASCULINO)
             page.select_option("#rev-sexo", "MASCULINO")
             # Alto riesgo
             page.fill("#rev-alto-riesgo", "0")
 
-            # Declare new period in Table 2
+            # Advance from Step 2 to Step 3 (Review Periods and Weeks)
+            page.click("#btn-to-review-periods")
+            page.wait_for_selector("#step-panel-3", state="visible", timeout=10000)
+
+            # Check summary table in Step 3
+            assert page.is_visible("#table-resumen-empleadores")
+            summary_rows = page.locator("#table-resumen-empleadores tbody tr")
+            assert summary_rows.count() >= 2
+
+            # Check Table 2 (Detail records) in Step 3
+            pdf_rows = page.locator("#table-registros tbody tr")
+            assert pdf_rows.count() >= 4
+            # First row has PDF badge
+            assert "PDF" in pdf_rows.first.inner_text()
+
+            # Declare new period in Step 3
             page.fill("#decl-inicio", "2025-01-01")
             page.fill("#decl-fin", "2025-03-31")
             page.fill("#decl-dias", "90")
             page.fill("#decl-ibc", "3800000")
             page.fill("#decl-aportante", "EMPRESA ADICIONAL DECLARADA")
+            page.fill("#decl-motivo", "Período adicional acreditado")
             page.click("#btn-add-declared-period")
 
-            # Verify declared table displays the new row
-            page.wait_for_selector(
-                "#table-registros-declarados tbody tr:has-text('DECLARACION_USUARIO')"
-            )
-            decl_rows = page.locator("#table-registros-declarados tbody tr")
-            assert decl_rows.count() >= 1
-            assert "DECLARACION_USUARIO" in decl_rows.first.inner_text()
-            assert "EMPRESA ADICIONAL DECLARADA" in decl_rows.first.inner_text()
+            # Verify reconciliation KPIs updated
+            page.wait_for_selector("#recon-kpi-activas")
+            assert float(page.inner_text("#recon-kpi-activas")) > 0
 
-            # 5. Confirm review and evaluate transition (Step 3)
-            page.click("button:has-text('Confirmar Datos y Evaluar Transición')")
-            page.wait_for_selector("#step-panel-3", state="visible", timeout=10000)
+            # 5. Confirm periods and evaluate transition (Step 4)
+            page.click("#btn-confirm-periods-to-transition")
+            page.wait_for_selector("#step-panel-4", state="visible", timeout=10000)
 
             # Check transition result banner
             banner_text = page.inner_text("#transition-result-banner")
             assert "COBIJADO POR EL RÉGIMEN DE TRANSICIÓN" in banner_text
             assert "900" in page.inner_text("#trans-kpi-umbral")
 
-            # 6. Proceed to Step 4: Scenario Configuration
+            # 6. Proceed to Step 5: Scenario Configuration
             page.click("#btn-to-step-4")
-            page.wait_for_selector("#step-panel-4", state="visible")
+            page.wait_for_selector("#step-panel-5", state="visible")
 
             # Run Simulation
             page.click("#btn-run-simulation")
 
-            # 7. Step 5: Results & Comparison
-            page.wait_for_selector("#step-panel-5", state="visible", timeout=10000)
+            # 7. Step 6: Results & Comparison
+            page.wait_for_selector("#step-panel-6", state="visible", timeout=10000)
             res_cards = page.locator("#simulation-output .card")
             assert res_cards.count() >= 2
 
             # 8. Step-by-Step Audit Modal (Hallazgo 6 & 7)
             page.click("button:has-text('Auditoría de la Simulación')")
             page.wait_for_selector("#audit-modal.active", state="visible")
+            page.wait_for_selector(
+                "#audit-content-area .card", state="visible", timeout=5000
+            )
 
             # Verify Audit content sections
             audit_text = page.inner_text("#audit-content-area")

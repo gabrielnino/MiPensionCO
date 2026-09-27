@@ -13,7 +13,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from src.audit.models import (
     AuditSeverity,
@@ -22,6 +22,7 @@ from src.audit.models import (
     EventCode,
     ScenarioCalculationAudit,
     TechnicalLogEntry,
+    UserCorrectionAudit,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,32 @@ class AuditService:
             audit.scenarios_audit[existing_idx] = scenario_audit
         else:
             audit.scenarios_audit.append(scenario_audit)
+
+    @classmethod
+    def record_user_correction(
+        cls,
+        execution_id: str,
+        field_name: str,
+        original_value: Any,
+        corrected_value: Any,
+        reason: str,
+        provenance: str,
+        invalidated_evaluations: list[str] | None = None,
+    ) -> UserCorrectionAudit:
+        """Records a user manual correction in the audit trail."""
+        audit = cls.get_or_create_audit(execution_id)
+        corr = UserCorrectionAudit(
+            field_name=field_name,
+            original_value=original_value,
+            corrected_value=corrected_value,
+            reason=reason,
+            provenance=provenance,
+            timestamp_iso=datetime.now(timezone.utc).isoformat(),
+            order=len(audit.user_corrections) + 1,
+            invalidated_evaluations=invalidated_evaluations or ["TRANSICION", "SIMULACION"],
+        )
+        audit.user_corrections.append(corr)
+        return corr
 
     @classmethod
     def save_audit_locally(

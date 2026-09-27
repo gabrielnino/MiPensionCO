@@ -154,6 +154,12 @@ class ScenarioCalculationAudit:
     is_blocked: bool
     blocking_reason: str | None
     step_by_step_operations: list[str]
+    data_version_used: str = "Rev-1"
+    provenance_counts: dict[str, int] = field(default_factory=dict)
+    legal_disclaimer: str = (
+        "Las correcciones manuales y períodos declarados son supuestos del usuario "
+        "y no constituyen certificaciones emitidas por Colpensiones."
+    )
 
 
 @dataclass

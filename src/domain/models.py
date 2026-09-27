@@ -14,6 +14,7 @@ from typing import Any
 class ProvenanceType(str, Enum):
     PDF = "PDF"
     DECLARACION_USUARIO = "DECLARACION_USUARIO"
+    CORRECCION_MANUAL = "CORRECCION_MANUAL"
     SUPUESTO = "SUPUESTO"
 
 
@@ -59,6 +60,12 @@ class CotizacionRecord:
     fila: int = 1
     dias_pendientes_validacion: bool = False
     source_fragment_ids: tuple[str, ...] = ()
+    record_id: str = ""
+    excluido_del_calculo: bool = False
+    motivo_exclusion: str = ""
+    motivo_correccion: str = ""
+    estado_validacion: str = "VALIDO"
+    valor_original: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -78,6 +85,12 @@ class CotizacionRecord:
             "fila": self.fila,
             "dias_pendientes_validacion": self.dias_pendientes_validacion,
             "source_fragment_ids": list(self.source_fragment_ids),
+            "record_id": self.record_id,
+            "excluido_del_calculo": self.excluido_del_calculo,
+            "motivo_exclusion": self.motivo_exclusion,
+            "motivo_correccion": self.motivo_correccion,
+            "estado_validacion": self.estado_validacion,
+            "valor_original": self.valor_original,
         }
 
 
@@ -162,6 +175,9 @@ class HistoriaLaboral:
         "DESCONOCIDO"  # "SIN_APORTES" | "CON_APORTES" | "DESCONOCIDO"
     )
     correcciones: list[CorreccionRegistro] = field(default_factory=list)
+    revision_version: int = 1
+    revision_id: str = "rev_initial"
+    original_registros: list[CotizacionRecord] = field(default_factory=list)
 
     def total_dias_cotizados(self) -> int:
         return sum(r.dias_cotizados for r in self.registros)
