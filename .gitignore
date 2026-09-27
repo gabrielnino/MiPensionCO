@@ -63,3 +63,7 @@ backups/
 htmlcov/
 audit/
 
+
+# Local credentials and identity databases
+config/secrets.*.env
+config/*.sqlite3
