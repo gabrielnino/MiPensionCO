@@ -4,6 +4,7 @@ Runs exclusively on local loopback (127.0.0.1).
 Zero external telemetry or cloud communication.
 """
 
+import uuid
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -11,9 +12,16 @@ from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+)
 from pydantic import BaseModel
 
+from src.audit.models import AuditSeverity, AuditStep, EventCode
+from src.audit.service import AuditService
 from src.domain.models import (
     AffiliationStatus,
     CotizacionRecord,
@@ -98,6 +106,7 @@ class EscenarioInputDTO(BaseModel):
 class SimulateRequestDTO(BaseModel):
     historia: HistoriaLaboralDTO
     escenarios: list[EscenarioInputDTO]
+    execution_id: str | None = None
 
 
 def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
@@ -152,10 +161,26 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
         )
 
     f_nac = date.fromisoformat(dto.fecha_nacimiento) if dto.fecha_nacimiento else None
-    f_afil = date.fromisoformat(dto.fecha_afiliacion_colpensiones) if dto.fecha_afiliacion_colpensiones else None
-    f_prim = date.fromisoformat(dto.fecha_primera_cotizacion) if dto.fecha_primera_cotizacion else None
-    f_exp = date.fromisoformat(dto.fecha_expedicion_reporte) if dto.fecha_expedicion_reporte else None
-    f_act = date.fromisoformat(dto.fecha_actualizacion_reporte) if dto.fecha_actualizacion_reporte else None
+    f_afil = (
+        date.fromisoformat(dto.fecha_afiliacion_colpensiones)
+        if dto.fecha_afiliacion_colpensiones
+        else None
+    )
+    f_prim = (
+        date.fromisoformat(dto.fecha_primera_cotizacion)
+        if dto.fecha_primera_cotizacion
+        else None
+    )
+    f_exp = (
+        date.fromisoformat(dto.fecha_expedicion_reporte)
+        if dto.fecha_expedicion_reporte
+        else None
+    )
+    f_act = (
+        date.fromisoformat(dto.fecha_actualizacion_reporte)
+        if dto.fecha_actualizacion_reporte
+        else None
+    )
 
     return HistoriaLaboral(
         cedula_enmascarada=dto.cedula_enmascarada,
@@ -184,7 +209,9 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
 async def serve_index() -> Any:
     index_file = STATIC_DIR / "index.html"
     if not index_file.exists():
-        return HTMLResponse("<h1>MiPensiónCO Backend Activo</h1><p>Archivo static/index.html en construcción.</p>")
+        return HTMLResponse(
+            "<h1>MiPensiónCO Backend Activo</h1><p>Archivo static/index.html en construcción.</p>"
+        )
     return FileResponse(index_file)
 
 
@@ -195,10 +222,15 @@ async def upload_pdf(
 ) -> JSONResponse:
     """Processes labor history PDF strictly in local memory."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="El archivo cargado debe ser un documento PDF.")
+        raise HTTPException(
+            status_code=400, detail="El archivo cargado debe ser un documento PDF."
+        )
 
     contents = await file.read()
-    historia, report = ColpensionesPDFReader.extract_from_bytes(contents, password=password)
+    exec_id = str(uuid.uuid4())
+    historia, report = ColpensionesPDFReader.extract_from_bytes(
+        contents, password=password, execution_id=exec_id
+    )
 
     if report.requires_password:
         return JSONResponse(
@@ -206,7 +238,9 @@ async def upload_pdf(
             content={
                 "success": False,
                 "requires_password": True,
-                "error_message": report.error_message or "El PDF está protegido con contraseña.",
+                "execution_id": exec_id,
+                "error_message": report.error_message
+                or "El PDF está protegido con contraseña.",
             },
         )
 
@@ -215,7 +249,9 @@ async def upload_pdf(
             status_code=422,
             content={
                 "success": False,
-                "error_message": report.error_message or "No fue posible extraer la información del PDF.",
+                "execution_id": exec_id,
+                "error_message": report.error_message
+                or "No fue posible extraer la información del PDF.",
             },
         )
 
@@ -225,6 +261,7 @@ async def upload_pdf(
         content={
             "success": True,
             "report": {
+                "execution_id": report.execution_id or exec_id,
                 "pages_processed": report.pages_processed,
                 "records_extracted": report.records_extracted,
                 "warnings": report.warnings,
@@ -232,14 +269,26 @@ async def upload_pdf(
             "data": {
                 "cedula_enmascarada": historia.cedula_enmascarada,
                 "nombre_enmascarado": historia.nombre_enmascarado,
-                "fecha_nacimiento": historia.fecha_nacimiento.isoformat() if historia.fecha_nacimiento else None,
+                "fecha_nacimiento": historia.fecha_nacimiento.isoformat()
+                if historia.fecha_nacimiento
+                else None,
                 "sexo": historia.sexo.value if historia.sexo else None,
-                "fecha_afiliacion_colpensiones": historia.fecha_afiliacion_colpensiones.isoformat() if historia.fecha_afiliacion_colpensiones else None,
-                "fecha_primera_cotizacion": historia.fecha_primera_cotizacion.isoformat() if historia.fecha_primera_cotizacion else None,
-                "fecha_expedicion_reporte": historia.fecha_expedicion_reporte.isoformat() if historia.fecha_expedicion_reporte else None,
-                "fecha_actualizacion_reporte": historia.fecha_actualizacion_reporte.isoformat() if historia.fecha_actualizacion_reporte else None,
+                "fecha_afiliacion_colpensiones": historia.fecha_afiliacion_colpensiones.isoformat()
+                if historia.fecha_afiliacion_colpensiones
+                else None,
+                "fecha_primera_cotizacion": historia.fecha_primera_cotizacion.isoformat()
+                if historia.fecha_primera_cotizacion
+                else None,
+                "fecha_expedicion_reporte": historia.fecha_expedicion_reporte.isoformat()
+                if historia.fecha_expedicion_reporte
+                else None,
+                "fecha_actualizacion_reporte": historia.fecha_actualizacion_reporte.isoformat()
+                if historia.fecha_actualizacion_reporte
+                else None,
                 "estado_afiliacion": historia.estado_afiliacion.value,
-                "semanas_resumen_colpensiones": float(historia.semanas_resumen_colpensiones),
+                "semanas_resumen_colpensiones": float(
+                    historia.semanas_resumen_colpensiones
+                ),
                 "semanas_alto_riesgo": float(historia.semanas_alto_riesgo),
                 "tiempos_publicos": float(historia.tiempos_publicos),
                 "es_caso_especial": historia.es_caso_especial,
@@ -252,7 +301,9 @@ async def upload_pdf(
 
 
 @app.post("/api/evaluate-transition")
-async def evaluate_transition_endpoint(historia_dto: HistoriaLaboralDTO) -> JSONResponse:
+async def evaluate_transition_endpoint(
+    historia_dto: HistoriaLaboralDTO,
+) -> JSONResponse:
     """Evaluates transition regime under Ley 2381 Art. 75 and C-264/2026."""
     historia = dto_to_domain(historia_dto)
     evaluation = PensionEngine.evaluate_transition(
@@ -313,15 +364,58 @@ async def simulate_endpoint(req: SimulateRequestDTO) -> JSONResponse:
             supuesto_crecimiento_smlmv=Decimal(str(esc_dto.supuesto_crecimiento_smlmv)),
         )
 
-        sim_res = engine.simulate_scenario(historia, esc, as_of_date=date(2026, 9, 27))
+        sim_res = engine.simulate_scenario(
+            historia, esc, as_of_date=date(2026, 9, 27), execution_id=req.execution_id
+        )
         results.append(sim_res.to_dict())
 
     return JSONResponse(
         content={
             "transition_evaluation": evaluation.to_dict(),
+            "execution_id": req.execution_id,
             "results": results,
         }
     )
+
+
+@app.get("/api/audit/{execution_id}")
+async def get_audit_endpoint(execution_id: str) -> JSONResponse:
+    """Returns detailed in-memory audit record for a given execution ID."""
+    audit = AuditService.get_or_create_audit(execution_id)
+    return JSONResponse(content=audit.to_dict())
+
+
+@app.post("/api/audit/{execution_id}/save-local")
+async def save_audit_local_endpoint(
+    execution_id: str,
+    enable_sensitive_save: bool = True,
+) -> JSONResponse:
+    """Saves complete audit record to local disk with user consent."""
+    saved_path = AuditService.save_audit_locally(
+        execution_id, enable_sensitive_save=enable_sensitive_save
+    )
+    if not saved_path:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": "No se pudo guardar la auditoría local o está deshabilitada.",
+            },
+        )
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": f"Auditoría guardada exitosamente en {saved_path.name}",
+            "file_path": str(saved_path),
+        }
+    )
+
+
+@app.get("/api/audit/{execution_id}/report.md")
+async def get_audit_markdown_endpoint(execution_id: str) -> PlainTextResponse:
+    """Returns Markdown diagnostic report for human review."""
+    report_text = AuditService.generate_markdown_report(execution_id)
+    return PlainTextResponse(content=report_text, media_type="text/markdown")
 
 
 @app.get("/api/catalog")
@@ -353,6 +447,24 @@ async def get_economic_data() -> JSONResponse:
 
 
 @app.post("/api/reset-session")
-async def reset_session() -> JSONResponse:
-    """Wipes in-memory session data for privacy."""
-    return JSONResponse(content={"status": "SESSION_CLEARED", "message": "Datos de sesión borrados con éxito."})
+async def reset_session(execution_id: str | None = None) -> JSONResponse:
+    """Wipes in-memory session data and removes disk audit files."""
+    AuditService.purge_session(execution_id=execution_id, purge_disk=True)
+    if execution_id:
+        AuditService.log_technical(
+            execution_id,
+            AuditStep.EXPORTACION_BORRADO,
+            "AuditService",
+            0.0,
+            AuditSeverity.INFO,
+            EventCode.SESION_BORRADA,
+            "COMPLETADO",
+            "Sesión y auditoría purgadas",
+            "Ninguna",
+        )
+    return JSONResponse(
+        content={
+            "status": "SESSION_CLEARED",
+            "message": "Datos de sesión y auditoría borrados con éxito.",
+        }
+    )

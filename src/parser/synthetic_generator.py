@@ -47,7 +47,7 @@ Tiempos Publicos: 0.00
 DETALLE DE PERIODOS COTIZADOS
 Periodo Inicio | Periodo Fin | Dias | IBC (COP) | Empleador
 """
-    if records_lines:
+    if records_lines is not None:
         for line in records_lines:
             text += line + "\n"
     else:

@@ -272,9 +272,9 @@ HISTORICAL_SMLMV: dict[int, SMLMVRecord] = {
     ),
     2026: SMLMVRecord(
         2026,
-        Decimal(1537380),
-        Decimal("51246.00"),
-        "Decreto Oficial 2026",
+        Decimal(1750905),
+        Decimal("58363.50"),
+        "Decreto 159 de 2026 (Transitorio en vigor)",
         "https://normativa.colpensiones.gov.co/",
     ),
 }
@@ -287,9 +287,6 @@ def get_smlmv(year: int) -> SMLMVRecord:
     """
     if year in HISTORICAL_SMLMV:
         return HISTORICAL_SMLMV[year]
-    # For years prior to 1990, use 1990 as base fallback or raise
-    if year < 1990:
-        return HISTORICAL_SMLMV[1990]
     raise ValueError(
-        f"SMLMV no registrado oficialmente para el año {year}. Requiere supuesto económico."
+        f"SMLMV_NO_REGISTRADO: SMLMV no registrado oficialmente para el año {year}. Requiere supuesto económico."
     )

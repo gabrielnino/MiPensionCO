@@ -12,14 +12,23 @@ Strictly follows statutory provisions:
 - Ley 2010 de 2019 / Ley 2294 de 2023 / D. 1833 de 2016 (descuentos en salud y FSP)
 """
 
+import calendar
 from datetime import date, timedelta
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
+from src.audit.models import (
+    AuditSeverity,
+    AuditStep,
+    EventCode,
+    ScenarioCalculationAudit,
+)
+from src.audit.service import AuditService
 from src.domain.models import (
     AffiliationStatus,
     CotizacionRecord,
     EscenarioConfig,
     HistoriaLaboral,
+    ProvenanceType,
     SexCategory,
     SimulationResult,
     TransitionEvaluation,
@@ -27,6 +36,7 @@ from src.domain.models import (
 )
 from src.economic.ipc import calculate_ipc_adjustment_factor
 from src.economic.projector import EconomicProjector
+from src.economic.smlmv import get_smlmv
 
 # Official transition cutoff dates
 TRANSITION_CUTOFF_DATE_ORIGINAL = date(2025, 7, 1)
@@ -130,37 +140,57 @@ class PensionEngine:
         umbral = cls.get_transition_threshold(historia.sexo)
 
         # Compute accredited weeks up to cutoff date
+        # Finding 2.4 fix: Cap each period's credit to min(dias_cotizados, span_days)
         accredited_days_to_cutoff: set[date] = set()
         for r in historia.registros:
             if r.periodo_inicio <= cutoff_date:
-                # Clip period to cutoff
                 p_end = min(r.periodo_fin, cutoff_date)
-                cur = r.periodo_inicio
-                while cur <= p_end:
-                    accredited_days_to_cutoff.add(cur)
-                    cur += timedelta(days=1)
+                span_days = (p_end - r.periodo_inicio).days + 1
+                if span_days > 0 and r.dias_cotizados > 0:
+                    effective_days = min(r.dias_cotizados, span_days)
+                    for offset in range(effective_days):
+                        accredited_days_to_cutoff.add(
+                            r.periodo_inicio + timedelta(days=offset)
+                        )
 
         # Convert unique calendar days to weeks (7 days = 1 week per SL138-2024)
         semanas_al_corte = (
             Decimal(len(accredited_days_to_cutoff)) / Decimal(7)
         ).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
 
-        # If the report was updated on or before the cutoff date (or if all contributions are before cutoff),
-        # the documentary summary recognized by Colpensiones is valid documentary evidence
         latest_record_date = (
             max([r.periodo_fin for r in historia.registros])
             if historia.registros
             else None
         )
-        report_date = historia.fecha_actualizacion_reporte or latest_record_date
+        report_date = (
+            historia.fecha_actualizacion_reporte
+            or historia.fecha_expedicion_reporte
+            or latest_record_date
+        )
 
+        # Finding 2.5 fix: A summary issued after the cutoff date without itemized records
+        # cannot prove how many weeks occurred prior to cutoff date
         if historia.semanas_resumen_colpensiones > Decimal(0):
             if report_date and report_date <= cutoff_date:
+                # Certified before or on cutoff -> all recognized weeks necessarily occurred prior to cutoff
                 semanas_al_corte = max(
                     semanas_al_corte, historia.semanas_resumen_colpensiones
                 )
-            elif not historia.registros:
-                semanas_al_corte = historia.semanas_resumen_colpensiones
+            elif not historia.registros and report_date and report_date > cutoff_date:
+                # Report updated after cutoff without period records -> cannot certify transition threshold
+                return TransitionEvaluation(
+                    status=TransitionStatus.INFORMACION_INSUFICIENTE,
+                    umbral_exigido=umbral,
+                    semanas_acreditadas_al_corte=Decimal(0),
+                    fecha_corte_aplicada=cutoff_date,
+                    fuente_juridica="Ley 2381 de 2024, Art. 75",
+                    explicacion=(
+                        f"El reporte presenta {historia.semanas_resumen_colpensiones} semanas en resumen con fecha posterior al corte ({report_date.isoformat()}), "
+                        f"pero no incluye el detalle de períodos cotizados para verificar cuántas semanas corresponden al período anterior al {cutoff_date.isoformat()}."
+                    ),
+                    permite_continuar_simulacion=False,
+                )
 
         # Evaluation rules
         if semanas_al_corte >= Decimal(umbral):
@@ -228,16 +258,108 @@ class PensionEngine:
         """Computes total weeks using exact calendar days (SL138-2024: 7 days = 1 week).
 
         Eliminates duplicate days caused by simultaneous employers.
+        For partial periods, credits min(dias_cotizados, span_days).
         """
         cotized_days: set[date] = set()
         for r in registros:
-            cur = r.periodo_inicio
-            while cur <= r.periodo_fin:
-                cotized_days.add(cur)
-                cur += timedelta(days=1)
+            span_days = (r.periodo_fin - r.periodo_inicio).days + 1
+            if span_days <= 0 or r.dias_cotizados <= 0:
+                continue
+            effective_days = min(r.dias_cotizados, span_days)
+            for offset in range(effective_days):
+                cotized_days.add(r.periodo_inicio + timedelta(days=offset))
+
         return (Decimal(len(cotized_days)) / Decimal(7)).quantize(
             Decimal("0.01"), rounding=ROUND_FLOOR
         )
+
+    @classmethod
+    def consolidate_monthly_contributions(
+        cls,
+        registros: list[CotizacionRecord],
+        horizon_date: date | None = None,
+        projector: EconomicProjector | None = None,
+    ) -> list[tuple[int, int, int, Decimal]]:
+        """Consolidates cotizacion records into unified monthly periods (Finding 2.7 & 2.8).
+
+        Statutory rules:
+        - Ley 100 Art. 18 & D. 1833 de 2016: Simultaneous employers in the same month consolidate
+          their IBCs (up to statutory cap of 25 SMLMV for that year) for at most 30 effective days.
+        - Excludes records where periodo_inicio > horizon_date (Finding 2.8).
+        - Multi-month continuous records are sliced into monthly periods of at most 30 days each.
+
+        Returns:
+            List of (year, month, effective_days, consolidated_ibc) ordered descending by (year, month).
+        """
+        proj = projector or EconomicProjector()
+        month_buckets: dict[tuple[int, int], list[tuple[int, Decimal]]] = {}
+
+        for r in registros:
+            # Finding 2.8: exclude contributions starting strictly after the horizon date
+            if horizon_date and r.periodo_inicio > horizon_date:
+                continue
+
+            r_end = min(r.periodo_fin, horizon_date) if horizon_date else r.periodo_fin
+            r_start = r.periodo_inicio
+            if r_start > r_end or r.dias_cotizados <= 0:
+                continue
+
+            # Calculate total months spanned by this record
+            months_count = (
+                (r_end.year - r_start.year) * 12 + (r_end.month - r_start.month) + 1
+            )
+
+            if months_count == 1:
+                key = (r_end.year, r_end.month)
+                span_days = (r_end - r_start).days + 1
+                eff_days = min(30, min(r.dias_cotizados, span_days))
+                if key not in month_buckets:
+                    month_buckets[key] = []
+                month_buckets[key].append((eff_days, r.ibc))
+            else:
+                # Decompose multi-month record
+                cur_y, cur_m = r_start.year, r_start.month
+                days_per_month = min(30, max(1, r.dias_cotizados // months_count))
+                while (cur_y < r_end.year) or (
+                    cur_y == r_end.year and cur_m <= r_end.month
+                ):
+                    key = (cur_y, cur_m)
+                    m_start = max(r_start, date(cur_y, cur_m, 1))
+                    m_end = min(
+                        r_end, date(cur_y, cur_m, calendar.monthrange(cur_y, cur_m)[1])
+                    )
+                    m_span = (m_end - m_start).days + 1
+                    eff_m_days = min(30, min(days_per_month, m_span))
+                    if key not in month_buckets:
+                        month_buckets[key] = []
+                    month_buckets[key].append((eff_m_days, r.ibc))
+
+                    if cur_m == 12:
+                        cur_y += 1
+                        cur_m = 1
+                    else:
+                        cur_m += 1
+
+        consolidated: list[tuple[int, int, int, Decimal]] = []
+        for key in sorted(month_buckets.keys(), reverse=True):
+            y, m = key
+            entries = month_buckets[key]
+            # Cap monthly effective days at 30 days
+            month_days = min(30, sum(d for d, _ in entries))
+            # Reference SMLMV for the 25 SMLMV ceiling
+            try:
+                smlmv_ref = get_smlmv(y).monthly_amount
+            except ValueError:
+                smlmv_ref = proj.get_projected_smlmv(y)
+
+            max_ibc_month = smlmv_ref * Decimal(25)
+            total_ibc_month = min(
+                max_ibc_month, sum((ibc for _, ibc in entries), Decimal(0))
+            )
+            if month_days > 0 and total_ibc_month > Decimal(0):
+                consolidated.append((y, m, month_days, total_ibc_month))
+
+        return consolidated
 
     def calculate_ibl(
         self,
@@ -245,16 +367,25 @@ class PensionEngine:
         target_year: int,
         target_month: int,
         assumed_inflation: Decimal = Decimal("0.04"),
+        records: list[CotizacionRecord] | None = None,
+        horizon_date: date | None = None,
     ) -> tuple[Decimal | None, Decimal | None, str, Decimal]:
         """Calculates IBL comparing 10-year effective cotizaciones vs lifetime average.
 
         Under SL18546-2016, 10 years means 3,650 days of effective cotizaciones (not calendar months).
         Under Ley 100 Art. 21, lifetime average is only accessible if total accredited weeks >= 1,250.
+        Simultaneous employers are consolidated per Finding 2.7.
+        Post-horizon records are excluded per Finding 2.8.
         """
-        sorted_records = sorted(
-            historia.registros, key=lambda r: r.periodo_fin, reverse=True
+        active_records = records if records is not None else historia.registros
+        if not active_records:
+            return None, None, "SIN_REGISTROS", Decimal(0)
+
+        # Consolidate records by month
+        monthly_contributions = self.consolidate_monthly_contributions(
+            active_records, horizon_date=horizon_date, projector=self.projector
         )
-        if not sorted_records:
+        if not monthly_contributions:
             return None, None, "SIN_REGISTROS", Decimal(0)
 
         # 1. 10 years of effective contributions (3,650 days)
@@ -262,20 +393,18 @@ class PensionEngine:
         accumulated_days_10y = 0
         weighted_ibc_sum_10y = Decimal(0)
 
-        for r in sorted_records:
-            dias_en_registro = max(1, r.dias_cotizados)
+        for y, m, days_in_month, ibc_month in monthly_contributions:
             dias_a_tomar = min(
-                dias_en_registro, effective_days_needed - accumulated_days_10y
+                days_in_month, effective_days_needed - accumulated_days_10y
             )
-
             factor_ipc = calculate_ipc_adjustment_factor(
-                initial_year=r.periodo_fin.year,
-                initial_month=r.periodo_fin.month,
+                initial_year=y,
+                initial_month=m,
                 target_year=target_year,
                 target_month=target_month,
                 assumed_annual_inflation=assumed_inflation,
             )
-            ibc_actualizado = r.ibc * factor_ipc
+            ibc_actualizado = ibc_month * factor_ipc
             weighted_ibc_sum_10y += ibc_actualizado * Decimal(dias_a_tomar)
             accumulated_days_10y += dias_a_tomar
 
@@ -291,19 +420,20 @@ class PensionEngine:
         )
 
         # 2. Lifetime average (toda la vida laboral)
-        total_weeks = self.compute_calendar_weeks(historia.registros)
-        total_days_all = sum(r.dias_cotizados for r in historia.registros)
+        total_weeks = self.compute_calendar_weeks(active_records)
+        total_days_all = 0
         weighted_ibc_sum_all = Decimal(0)
 
-        for r in historia.registros:
+        for y, m, days_in_month, ibc_month in monthly_contributions:
             factor_ipc = calculate_ipc_adjustment_factor(
-                initial_year=r.periodo_fin.year,
-                initial_month=r.periodo_fin.month,
+                initial_year=y,
+                initial_month=m,
                 target_year=target_year,
                 target_month=target_month,
                 assumed_annual_inflation=assumed_inflation,
             )
-            weighted_ibc_sum_all += (r.ibc * factor_ipc) * Decimal(r.dias_cotizados)
+            weighted_ibc_sum_all += (ibc_month * factor_ipc) * Decimal(days_in_month)
+            total_days_all += days_in_month
 
         ibl_all = (
             (weighted_ibc_sum_all / Decimal(total_days_all)).quantize(
@@ -326,8 +456,10 @@ class PensionEngine:
         if ibl_10y is not None:
             return ibl_10y, ibl_all, "ULTIMOS_10_ANOS_EFECTIVOS", ibl_10y
 
-        final_fallback = ibl_all or Decimal(0)
-        return ibl_10y, ibl_all, "TOTAL_DISPONIBLE", final_fallback
+        if ibl_all is not None:
+            return ibl_10y, ibl_all, "TOTAL_DISPONIBLE", ibl_all
+
+        return None, None, "SIN_REGISTROS", Decimal(0)
 
     def calculate_replacement_rate(
         self,
@@ -335,11 +467,11 @@ class PensionEngine:
         smlmv_ref: Decimal,
         total_weeks: Decimal,
         required_weeks: int,
-    ) -> tuple[Decimal, Decimal, int, Decimal, Decimal]:
+    ) -> tuple[Decimal, Decimal, Decimal, int, Decimal, Decimal]:
         """Calculates replacement rate under Ley 797 Art. 10 & SL810-2023.
 
         Returns:
-            (s_factor, tasa_inicial_pct, bloques_completos, incremento_pct, tasa_final_pct)
+            (s_factor, tasa_inicial_pct, semanas_adicionales, bloques_completos, incremento_pct, tasa_final_pct)
         """
         # s = IBL / SMLMV
         s_factor = (ibl / smlmv_ref).quantize(Decimal("0.0001"))
@@ -368,7 +500,7 @@ class PensionEngine:
             bloques_50,
             incremento,
             tasa_final,
-        )  # type: ignore
+        )
 
     @staticmethod
     def calculate_deductions(
@@ -415,8 +547,15 @@ class PensionEngine:
         historia: HistoriaLaboral,
         escenario: EscenarioConfig,
         as_of_date: date | None = None,
+        execution_id: str | None = None,
     ) -> SimulationResult:
-        """Executes complete deterministic simulation terminating strictly at legal retirement age."""
+        """Executes complete deterministic simulation terminating strictly at legal retirement age.
+
+        Incorporates fixes for:
+        - Finding 2.2: Generates hypothetical monthly future contributions reflecting escenario.ibc_futuro_inicial.
+        - Finding 2.3: Blocks mesada (None) when no salary/IBC data exists in history.
+        - Finding 2.8: Strictly excludes post-horizon contributions from pension determination.
+        """
         today = as_of_date or date(2026, 9, 27)
 
         if historia.fecha_nacimiento is None or historia.sexo is None:
@@ -434,39 +573,93 @@ class PensionEngine:
 
         ya_supero_edad = today >= horizon_date
 
-        # 1. Accredited documentary and calendar weeks
+        # 1. Accredited documentary and calendar weeks (filtered to horizon_date)
         semanas_doc = historia.semanas_resumen_colpensiones
+        # Filter historical records up to horizon_date
+        historical_records_to_horizon = [
+            r for r in historia.registros if r.periodo_inicio <= horizon_date
+        ]
         semanas_cal = self.compute_calendar_weeks(historia.registros)
         diferencia_cal = (semanas_cal - semanas_doc).quantize(Decimal("0.01"))
 
-        # Base weeks to use for baseline projection (we use documentary or calendar)
+        # Base accredited weeks
         base_weeks = max(semanas_doc, semanas_cal)
 
-        # 2. Projected future weeks up to retirement horizon
+        # 2. Finding 2.2 Fix: Generate hypothetical future contributions up to horizon date
+        projected_future_records: list[CotizacionRecord] = []
         semanas_proyectadas = Decimal(0)
+
         if not ya_supero_edad:
-            # Last recorded contribution date
             last_cot_date = (
                 max([r.periodo_fin for r in historia.registros])
                 if historia.registros
                 else today
             )
-            start_proj = max(last_cot_date + timedelta(days=1), today)
+            # Start of future projection
+            start_proj = max(
+                last_cot_date + timedelta(days=1), escenario.fecha_inicio_ibc
+            )
 
             if start_proj < horizon_date:
-                # Iterate each day to check pause periods
-                proj_days = 0
-                cur = start_proj
-                while cur < horizon_date:
-                    # Check if day falls inside any non-contribution pause
-                    in_pause = any(
-                        p_start <= cur <= p_end
-                        for p_start, p_end in escenario.periodos_sin_aporte
+                cur_y, cur_m = start_proj.year, start_proj.month
+                while (cur_y < horizon_date.year) or (
+                    cur_y == horizon_date.year and cur_m <= horizon_date.month
+                ):
+                    m_start = max(start_proj, date(cur_y, cur_m, 1))
+                    m_last_day = calendar.monthrange(cur_y, cur_m)[1]
+                    m_end = min(
+                        horizon_date - timedelta(days=1), date(cur_y, cur_m, m_last_day)
                     )
-                    if not in_pause:
-                        proj_days += 1
-                    cur += timedelta(days=1)
-                semanas_proyectadas = (Decimal(proj_days) / Decimal(7)).quantize(
+
+                    if m_start <= m_end:
+                        # Check pause intervals
+                        in_pause = any(
+                            p_start <= m_start <= p_end
+                            or p_start <= m_end <= p_end
+                            or (m_start <= p_start and p_end <= m_end)
+                            for p_start, p_end in escenario.periodos_sin_aporte
+                        )
+                        if not in_pause:
+                            span_days = (m_end - m_start).days + 1
+                            month_days = min(30, span_days)
+
+                            # Calculate nominal IBC for projected year
+                            years_diff = max(0, cur_y - start_proj.year)
+                            growth_factor = (
+                                Decimal(1) + escenario.crecimiento_anual_nominal
+                            ) ** Decimal(years_diff)
+                            nominal_ibc = (
+                                escenario.ibc_futuro_inicial * growth_factor
+                            ).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+
+                            # Bound between 1 and 25 SMLMV
+                            smlmv_proj = self.projector.get_projected_smlmv(cur_y)
+                            nominal_ibc = max(
+                                smlmv_proj, min(smlmv_proj * Decimal(25), nominal_ibc)
+                            )
+
+                            projected_future_records.append(
+                                CotizacionRecord(
+                                    periodo_inicio=m_start,
+                                    periodo_fin=m_end,
+                                    dias_reportados=month_days,
+                                    dias_cotizados=month_days,
+                                    ibc=nominal_ibc,
+                                    aportante=f"PROYECCIÓN: {escenario.nombre}",
+                                    origen=ProvenanceType.SUPUESTO,
+                                )
+                            )
+
+                    if cur_m == 12:
+                        cur_y += 1
+                        cur_m = 1
+                    else:
+                        cur_m += 1
+
+                total_proj_days = sum(
+                    r.dias_cotizados for r in projected_future_records
+                )
+                semanas_proyectadas = (Decimal(total_proj_days) / Decimal(7)).quantize(
                     Decimal("0.01"), rounding=ROUND_FLOOR
                 )
 
@@ -482,7 +675,7 @@ class PensionEngine:
 
         smlmv_ref = self.projector.get_projected_smlmv(horizon_date.year)
 
-        # Explanatory log
+        # Step breakdown narrative
         desglose: list[str] = [
             f"Horizonte ordinario: {horizon_date.isoformat()} (cumplimiento de {legal_age} años).",
             f"Requisito legal aplicable ({horizon_date.year}): {required_weeks} semanas.",
@@ -495,12 +688,12 @@ class PensionEngine:
             )
         else:
             desglose.append(
-                f"Semanas proyectadas hasta la edad legal: {semanas_proyectadas}."
+                f"Semanas proyectadas hasta la edad legal: {semanas_proyectadas} (con IBC proyectado ${escenario.ibc_futuro_inicial:,.0f} COP)."
             )
 
         desglose.append(f"Total semanas a la edad legal: {semanas_totales}.")
 
-        # If deficit: NO PAYABLE MESADA ALLOWED
+        # If deficit: strict product rule, no payable pension
         if not cumple_semanas:
             desglose.append(
                 f"DÉFICIT PENSIONAL: Faltan {deficit} semanas para reunir el requisito legal a la edad ordinaria."
@@ -508,8 +701,64 @@ class PensionEngine:
             desglose.append(
                 "REGLA ESTRICTA DE PRODUCTO: No se calcula una mesada pagadera ni se proyectan aportes posteriores a la edad legal."
             )
-
             advertencia = "No cumple con las semanas mínimas requeridas a la edad legal ordinaria. No se reconoce mesada pensional."
+
+            if execution_id:
+                AuditService.add_scenario_audit(
+                    execution_id,
+                    ScenarioCalculationAudit(
+                        scenario_id=escenario.escenario_id,
+                        scenario_name=escenario.nombre,
+                        fixed_horizon_date=horizon_date.isoformat(),
+                        legal_retirement_age=legal_age,
+                        inputs={
+                            "ibc_futuro": float(escenario.ibc_futuro_inicial),
+                            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
+                            "crecimiento": float(escenario.crecimiento_anual_nominal),
+                        },
+                        generated_future_periods_count=len(projected_future_records),
+                        weeks_breakdown={
+                            "documentales": float(semanas_doc),
+                            "calendario": float(semanas_cal),
+                            "proyectadas": float(semanas_proyectadas),
+                            "totales": float(semanas_totales),
+                            "exigidas": float(required_weeks),
+                            "deficit": float(deficit),
+                        },
+                        effective_contributions_selected=[],
+                        ibl_method_chosen="NO_APLICA_DEFICIT",
+                        ibl_final=None,
+                        smlmv_ref=float(smlmv_ref),
+                        s_factor=None,
+                        replacement_rate_initial_pct=None,
+                        additional_weeks_blocks=None,
+                        replacement_rate_final_pct=None,
+                        gross_pension=None,
+                        limit_applied="NINGUNO",
+                        health_discount_pct=None,
+                        health_discount_amount=None,
+                        fsp_discount_pct=None,
+                        fsp_discount_amount=None,
+                        net_pension_after_discounts=None,
+                        real_purchasing_power_cop=None,
+                        smlmv_multiples=None,
+                        is_blocked=True,
+                        blocking_reason="DEFICIT_SEMANAS_A_LA_EDAD_LEGAL",
+                        step_by_step_operations=desglose,
+                    ),
+                )
+                AuditService.log_technical(
+                    execution_id,
+                    AuditStep.EVALUACION_JURIDICA,
+                    "PensionEngine",
+                    0.0,
+                    AuditSeverity.INFO,
+                    EventCode.DEFICIT_SEMANAS_HORIZONTE,
+                    "BLOQUEADO",
+                    f"Déficit de {deficit} semanas",
+                    "Continuar cotizando hasta alcanzar las semanas requeridas",
+                )
+
             return SimulationResult(
                 escenario_id=escenario.escenario_id,
                 escenario_nombre=escenario.nombre,
@@ -549,12 +798,122 @@ class PensionEngine:
                 desglose_explicativo=desglose,
             )
 
-        # If eligible, calculate IBL
+        # 3. Calculate IBL using historical records + projected future records
+        all_simulation_records = (
+            historical_records_to_horizon + projected_future_records
+        )
+
+        # Finding 2.3 Fix: If there are NO salary records, block mesada with explicit warning
+        has_salary_data = any(r.ibc > Decimal(0) for r in all_simulation_records)
+        if not has_salary_data:
+            advertencia = (
+                "No existen registros de salarios o IBC en la historia laboral para calcular el IBL. "
+                "La mesada no puede liquidarse sin datos salariales verificables (IBL_INSUFICIENTE_DATOS_SALARIALES)."
+            )
+            desglose.append(
+                "BLOQUEO DE LIQUIDACIÓN: IBL_INSUFICIENTE_DATOS_SALARIALES."
+            )
+            desglose.append(advertencia)
+
+            if execution_id:
+                AuditService.add_scenario_audit(
+                    execution_id,
+                    ScenarioCalculationAudit(
+                        scenario_id=escenario.escenario_id,
+                        scenario_name=escenario.nombre,
+                        fixed_horizon_date=horizon_date.isoformat(),
+                        legal_retirement_age=legal_age,
+                        inputs={
+                            "ibc_futuro": float(escenario.ibc_futuro_inicial),
+                            "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
+                        },
+                        generated_future_periods_count=len(projected_future_records),
+                        weeks_breakdown={
+                            "documentales": float(semanas_doc),
+                            "calendario": float(semanas_cal),
+                            "proyectadas": float(semanas_proyectadas),
+                            "totales": float(semanas_totales),
+                        },
+                        effective_contributions_selected=[],
+                        ibl_method_chosen="SIN_REGISTROS_SALARIALES",
+                        ibl_final=None,
+                        smlmv_ref=float(smlmv_ref),
+                        s_factor=None,
+                        replacement_rate_initial_pct=None,
+                        additional_weeks_blocks=None,
+                        replacement_rate_final_pct=None,
+                        gross_pension=None,
+                        limit_applied="BLOQUEADO_SIN_SALARIOS",
+                        health_discount_pct=None,
+                        health_discount_amount=None,
+                        fsp_discount_pct=None,
+                        fsp_discount_amount=None,
+                        net_pension_after_discounts=None,
+                        real_purchasing_power_cop=None,
+                        smlmv_multiples=None,
+                        is_blocked=True,
+                        blocking_reason="IBL_INSUFICIENTE_DATOS_SALARIALES",
+                        step_by_step_operations=desglose,
+                    ),
+                )
+                AuditService.log_technical(
+                    execution_id,
+                    AuditStep.LIQUIDACION_PENSIONAL,
+                    "PensionEngine",
+                    0.0,
+                    AuditSeverity.ADVERTENCIA,
+                    EventCode.IBL_INSUFICIENTE_DATOS_SALARIALES,
+                    "BLOQUEADO",
+                    "Sin registros salariales",
+                    "Ingresar manualmente cotizaciones históricas o actualizar PDF con detalle",
+                )
+
+            return SimulationResult(
+                escenario_id=escenario.escenario_id,
+                escenario_nombre=escenario.nombre,
+                fecha_cumplimiento_edad_legal=horizon_date,
+                edad_legal=legal_age,
+                ya_supero_edad_legal=ya_supero_edad,
+                semanas_exigidas=required_weeks,
+                semanas_acreditadas_documentales=semanas_doc,
+                semanas_recalculadas_calendario=semanas_cal,
+                diferencia_semanas_recalculadas=diferencia_cal,
+                semanas_futuras_proyectadas=semanas_proyectadas,
+                semanas_totales_a_la_edad=semanas_totales,
+                cumple_semanas=True,
+                deficit_semanas=Decimal(0),
+                excedente_semanas=excedente,
+                ibl_ultimos_10_anos=None,
+                ibl_toda_la_vida=None,
+                metodo_ibl_seleccionado="SIN_REGISTROS",
+                ibl_final=None,
+                smlmv_referencia_retiro=smlmv_ref,
+                s_factor=None,
+                tasa_reemplazo_inicial_pct=None,
+                semanas_adicionales_computables=None,
+                bloques_completos_50_semanas=None,
+                incremento_tasa_pct=None,
+                tasa_reemplazo_final_pct=None,
+                mesada_bruta=None,
+                limite_aplicado="BLOQUEADO_SIN_SALARIOS",
+                descuento_salud_pct=None,
+                descuento_salud_monto=None,
+                descuento_fsp_pct=None,
+                descuento_fsp_monto=None,
+                valor_despues_descuentos=None,
+                valor_real_poder_adquisitivo=None,
+                equivalente_smlmv=None,
+                mensaje_advertencia=advertencia,
+                desglose_explicativo=desglose,
+            )
+
         ibl_10y, ibl_all, metodo_ibl, ibl_final = self.calculate_ibl(
             historia=historia,
             target_year=horizon_date.year,
             target_month=horizon_date.month,
             assumed_inflation=escenario.supuesto_inflacion,
+            records=all_simulation_records,
+            horizon_date=horizon_date,
         )
 
         desglose.append(
@@ -568,9 +927,9 @@ class PensionEngine:
             f"Método seleccionado: {metodo_ibl}. IBL aplicado: ${ibl_final:,.0f} COP."
         )
 
-        # Replacement rate
+        # 4. Replacement rate
         s_factor, tasa_ini, sem_adic, bloques, inc_tasa, tasa_final = (
-            self.calculate_replacement_rate(  # type: ignore
+            self.calculate_replacement_rate(
                 ibl=ibl_final,
                 smlmv_ref=smlmv_ref,
                 total_weeks=semanas_totales,
@@ -621,6 +980,64 @@ class PensionEngine:
         )
 
         advertencia = "Estimación informativa basada en los datos y supuestos indicados. El reconocimiento corresponde a Colpensiones."
+
+        if execution_id:
+            AuditService.add_scenario_audit(
+                execution_id,
+                ScenarioCalculationAudit(
+                    scenario_id=escenario.escenario_id,
+                    scenario_name=escenario.nombre,
+                    fixed_horizon_date=horizon_date.isoformat(),
+                    legal_retirement_age=legal_age,
+                    inputs={
+                        "ibc_futuro": float(escenario.ibc_futuro_inicial),
+                        "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
+                        "crecimiento": float(escenario.crecimiento_anual_nominal),
+                    },
+                    generated_future_periods_count=len(projected_future_records),
+                    weeks_breakdown={
+                        "documentales": float(semanas_doc),
+                        "calendario": float(semanas_cal),
+                        "proyectadas": float(semanas_proyectadas),
+                        "totales": float(semanas_totales),
+                    },
+                    effective_contributions_selected=[],
+                    ibl_method_chosen=metodo_ibl,
+                    ibl_final=float(ibl_final),
+                    smlmv_ref=float(smlmv_ref),
+                    s_factor=float(s_factor) if s_factor is not None else None,
+                    replacement_rate_initial_pct=float(tasa_ini)
+                    if tasa_ini is not None
+                    else None,
+                    additional_weeks_blocks=bloques,
+                    replacement_rate_final_pct=float(tasa_final)
+                    if tasa_final is not None
+                    else None,
+                    gross_pension=float(mesada_bruta),
+                    limit_applied=limite_aplicado,
+                    health_discount_pct=float(salud_pct),
+                    health_discount_amount=float(salud_monto),
+                    fsp_discount_pct=float(fsp_pct),
+                    fsp_discount_amount=float(fsp_monto),
+                    net_pension_after_discounts=float(valor_despues),
+                    real_purchasing_power_cop=float(val.real_base_cop),
+                    smlmv_multiples=float(val.smlmv_multiples),
+                    is_blocked=False,
+                    blocking_reason=None,
+                    step_by_step_operations=desglose,
+                ),
+            )
+            AuditService.log_technical(
+                execution_id,
+                AuditStep.PROYECCION_ESCENARIO,
+                "PensionEngine",
+                0.0,
+                AuditSeverity.INFO,
+                EventCode.SIMULACION_COMPLETADA,
+                "OK",
+                f"Escenario {escenario.nombre} calculado: mesada bruta ${mesada_bruta:,.0f} COP",
+                "",
+            )
 
         return SimulationResult(
             escenario_id=escenario.escenario_id,

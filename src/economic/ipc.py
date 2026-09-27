@@ -197,7 +197,9 @@ def get_ipc(year: int, month: int) -> Decimal:
 
     # For years prior to 1990
     if year < 1990:
-        return ANNUAL_IPC_FACTORS[1990]
+        raise ValueError(
+            f"IPC no disponible para {year}-{month:02d}. Serie oficial de empalme DANE inicia en 1990."
+        )
 
     raise ValueError(
         f"IPC no disponible para {year}-{month:02d}. Requiere supuesto de inflación futura."
@@ -213,27 +215,24 @@ def calculate_ipc_adjustment_factor(
 ) -> Decimal:
     """Calculates IPC multiplier: IPC_target / IPC_initial.
 
-    If target date is beyond official observed series (August 2026),
+    If initial or target date is beyond official observed series (August 2026),
     projects IPC using assumed_annual_inflation without double-counting.
     """
-    ipc_initial = get_ipc(initial_year, initial_month)
-
-    # Latest officially observed date
     latest_obs_year, latest_obs_month = 2026, 8
     latest_obs_ipc = IPC_SERIES_BASE_2018[(latest_obs_year, latest_obs_month)]
 
-    if (target_year < latest_obs_year) or (
-        target_year == latest_obs_year and target_month <= latest_obs_month
-    ):
-        ipc_target = get_ipc(target_year, target_month)
-    else:
-        # Project forward from latest observed date
-        months_difference = (target_year - latest_obs_year) * 12 + (
-            target_month - latest_obs_month
-        )
+    def _resolve_ipc(year: int, month: int) -> Decimal:
+        if (year < latest_obs_year) or (
+            year == latest_obs_year and month <= latest_obs_month
+        ):
+            return get_ipc(year, month)
+        months_difference = (year - latest_obs_year) * 12 + (month - latest_obs_month)
         monthly_inflation_factor = (Decimal(1) + assumed_annual_inflation) ** (
             Decimal(months_difference) / Decimal(12)
         )
-        ipc_target = latest_obs_ipc * monthly_inflation_factor
+        return latest_obs_ipc * monthly_inflation_factor
+
+    ipc_initial = _resolve_ipc(initial_year, initial_month)
+    ipc_target = _resolve_ipc(target_year, target_month)
 
     return ipc_target / ipc_initial

@@ -40,6 +40,7 @@ flowchart TD
   - El mes comercial de 30 días aplica para la facturación de aportes patronales.
   - La contabilización de semanas para la pensión se realiza por **días calendario reales** (cada 7 días calendario de cotización efectiva equivalen a una semana).
   - En caso de empleadores simultáneos en el mismo día calendario, **no se duplican los días**.
+  - **Períodos parciales:** Se computa estrictamente el menor valor entre los días cotizados y los días calendario del intervalo (`min(dias_cotizados, span_dias)`), impidiendo que un reporte de 1 día en un mes completo se sobreestime a 4.42 semanas (Hallazgo 2.4).
   - Se reconocen los años bisiestos (ej. 29 de febrero de 2024).
 
 ### 2.3 Requisitos de Edad y Semanas para Pensión Ordinaria de Vejez
@@ -60,6 +61,9 @@ flowchart TD
 
 ### 2.4 Ingreso Base de Liquidación (IBL)
 - **Regla General (10 Años Efectivos):** Conforme a la Sentencia **SL18546-2016**, los 10 años corresponden a los últimos 3.650 días de **cotizaciones efectivas**, indexados mes a mes con el IPC del DANE y ponderados por el tiempo cotizado. No se toman mecánicamente meses calendario vacíos como ceros.
+- **Unificación de Empleadores Simultáneos:** En aplicación de la Ley 100 de 1993 (Art. 18 parágrafo 1) y el Decreto 1833 de 2016, las cotizaciones simultáneas en un mismo mes calendario unifican sus IBCs (hasta el tope de 25 SMLMV del año respectivo) para un cómputo mensual máximo de 30 días efectivos, evitando dilución salarial o doble conteo temporal (Hallazgo 2.7).
+- **Exclusión de Cotizaciones Post-Horizonte:** Al evaluar el cumplimiento a la edad legal ordinaria en fechas pasadas, las cotizaciones efectuadas con posterioridad a dicho horizonte quedan estrictamente excluidas de la liquidación de dicho momento (Hallazgo 2.8).
+- **Bloqueo por Ausencia de Salarios:** Si la historia laboral solo contiene semanas documentales pero carece por completo de registros salariales o IBCs verificables, el simulador bloquea expresamente el cálculo de la mesada (`IBL_INSUFICIENTE_DATOS_SALARIALES`) impidiendo asignar indebidamente una mesada mínima de 1 SMLMV sin respaldo (Hallazgo 2.3).
 - **Opción de Toda la Vida Laboral:** Procede según el artículo 21 de la Ley 100 de 1993 únicamente cuando el afiliado acredite al menos **1.250 semanas cotizadas** y el promedio de toda la vida actualizado resulte superior al de los últimos 10 años. La reducción de semanas para mujeres no rebaja este umbral específico de 1.250 semanas.
 
 ### 2.5 Tasa de Reemplazo y Mesada Bruta (Ley 797 Art. 10 y SL810-2023)

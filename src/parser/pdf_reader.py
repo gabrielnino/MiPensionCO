@@ -3,15 +3,26 @@
 Uses PyMuPDF (fitz) for pure local, offline extraction.
 Does not log passwords or send data externally.
 Adheres strictly to Colombian formatting (DD/MM/YYYY, COP currency).
+Integrates with AuditService for step-by-step extraction audit.
 """
 
+import hashlib
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 
+from src.audit.models import (
+    AuditSeverity,
+    AuditStep,
+    DataFieldAudit,
+    EventCode,
+    PageExtractionAudit,
+)
+from src.audit.service import AuditService
 from src.domain.models import (
     AffiliationStatus,
     CotizacionRecord,
@@ -41,6 +52,7 @@ class ParseReport:
     pages_processed: int = 0
     records_extracted: int = 0
     warnings: list[str] = None  # type: ignore
+    execution_id: str = ""
 
     def __post_init__(self) -> None:
         if self.warnings is None:
@@ -51,9 +63,16 @@ class ColpensionesPDFReader:
     """Robust local parser for Colpensiones labor history reports."""
 
     DATE_PATTERN = re.compile(r"(\d{2})[/.-](\d{2})[/.-](\d{4})")
-    MONEY_PATTERN = re.compile(
-        r"[\$]?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?)"
+    MONEY_TOKEN_PATTERN = re.compile(
+        r"[\$]?\s*([0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]{2})?|[0-9]{5,}(?:,[0-9]{2})?)"
     )
+    DAYS_PATTERN = re.compile(r"\b([1-9]|[12]\d|3[01])\b")
+
+    @classmethod
+    def sanitize_text(cls, text: str) -> str:
+        """Sanitizes text by removing non-printable control characters while preserving plain string content."""
+        clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+        return clean.strip()
 
     @classmethod
     def parse_colombian_date(cls, text: str) -> date | None:
@@ -66,7 +85,6 @@ class ColpensionesPDFReader:
                 return date(year, month, day)
             except ValueError:
                 pass
-        # Try ISO
         try:
             return date.fromisoformat(text)
         except ValueError:
@@ -75,7 +93,7 @@ class ColpensionesPDFReader:
 
     @classmethod
     def parse_colombian_decimal(cls, text: str) -> Decimal:
-        """Parses Colombian currency or number strings (e.g. 1.234.567,50 or 1,234,567.50)."""
+        """Parses Colombian currency or number strings (e.g. 3.000.000 or 1,234,567.50)."""
         clean = text.replace("$", "").replace("COP", "").strip()
         if not clean:
             return Decimal(0)
@@ -89,16 +107,19 @@ class ColpensionesPDFReader:
                 # 1,234,567.89 -> remove commas
                 clean = clean.replace(",", "")
         elif "," in clean:
-            # Check if comma is decimal separator (e.g. 910,43) or thousands
             parts = clean.split(",")
             if len(parts) == 2 and len(parts[1]) in (1, 2):
                 clean = parts[0] + "." + parts[1]
             else:
                 clean = clean.replace(",", "")
         elif "." in clean:
-            # Check if dot is thousands separator (1.234.567) or decimal (910.43)
             parts = clean.split(".")
-            if len(parts) != 2 or len(parts[1]) not in (1, 2):
+            # If standard Colombian thousands dot (e.g. 3.000.000 or 150.000)
+            if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
+                clean = clean.replace(".", "")
+            elif len(parts) == 2 and len(parts[1]) in (1, 2):
+                pass  # Decimal point (e.g. 910.43)
+            else:
                 clean = clean.replace(".", "")
 
         try:
@@ -111,99 +132,229 @@ class ColpensionesPDFReader:
         cls,
         pdf_bytes: bytes,
         password: str | None = None,
+        execution_id: str | None = None,
     ) -> tuple[HistoriaLaboral | None, ParseReport]:
         """Parses Colpensiones PDF directly from in-memory byte buffer."""
-        report = ParseReport(success=False)
+        exec_id = execution_id or str(uuid.uuid4())
+        report = ParseReport(success=False, execution_id=exec_id)
+        audit = AuditService.get_or_create_audit(exec_id)
+        audit.document_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
         try:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         except (RuntimeError, ValueError) as exc:
-            report.error_message = f"Archivo corrupto o formato no reconocido: {exc}"
+            report.error_message = (
+                f"PDF_CORRUPTO: Archivo corrupto o formato no reconocido: {exc}"
+            )
+            AuditService.log_technical(
+                exec_id,
+                AuditStep.EXTRACCION_PDF,
+                "ColpensionesPDFReader",
+                0.0,
+                AuditSeverity.ERROR,
+                EventCode.PDF_CORRUPTO,
+                "ERROR",
+                str(exc),
+                "Verificar integridad del archivo",
+            )
             return None, report
 
         # 1. Password check
         if doc.is_encrypted:
             if not password:
                 report.requires_password = True
-                report.error_message = "El archivo PDF está protegido con contraseña."
+                report.error_message = (
+                    "PDF_PROTEGIDO_CLAVE: El archivo PDF está protegido con contraseña."
+                )
+                AuditService.log_technical(
+                    exec_id,
+                    AuditStep.EXTRACCION_PDF,
+                    "ColpensionesPDFReader",
+                    0.0,
+                    AuditSeverity.ADVERTENCIA,
+                    EventCode.PDF_PROTEGIDO_CLAVE,
+                    "BLOQUEADO",
+                    "Requiere clave",
+                    "Solicitar clave localmente",
+                )
                 doc.close()
                 return None, report
             auth_ok = doc.authenticate(password)
             if not auth_ok:
                 report.requires_password = True
-                report.error_message = "Contraseña incorrecta."
+                report.error_message = "PDF_PROTEGIDO_CLAVE: Contraseña incorrecta."
+                AuditService.log_technical(
+                    exec_id,
+                    AuditStep.EXTRACCION_PDF,
+                    "ColpensionesPDFReader",
+                    0.0,
+                    AuditSeverity.ADVERTENCIA,
+                    EventCode.PDF_PROTEGIDO_CLAVE,
+                    "BLOQUEADO",
+                    "Clave no válida",
+                    "Solicitar clave correcta",
+                )
                 doc.close()
                 return None, report
 
         if doc.page_count == 0:
-            report.error_message = "El archivo PDF no contiene páginas."
+            report.error_message = "PDF_VACIO: El archivo PDF no contiene páginas."
+            audit.extraction_status = "INCOMPLETA"
             doc.close()
             return None, report
 
         report.pages_processed = doc.page_count
+        audit.total_pages = doc.page_count
+        audit.pages_processed = doc.page_count
 
         historia = HistoriaLaboral(cedula_enmascarada="ANON-XXXXX")
         records: list[CotizacionRecord] = []
-
         total_text = ""
+        total_non_empty_pages = 0
+
         for page_idx in range(doc.page_count):
             page = doc[page_idx]
-            page_text = page.get_text("text")
-            total_text += page_text + "\n"
+            page_text = page.get_text("text").strip()
+            method = "TEXTO_DIRECTO"
 
-            # Parse lines on page
-            lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
+            # Check if page is empty or scanned without text layer
+            if not page_text:
+                # Attempt local OCR via PyMuPDF if available
+                try:
+                    if hasattr(page, "get_textpage_ocr"):
+                        ocr_tp = page.get_textpage_ocr(language="spa")
+                        page_text = page.get_text("text", textpage=ocr_tp).strip()
+                        if page_text:
+                            method = "OCR_LOCAL"
+                except (RuntimeError, AttributeError, ValueError, OSError):
+                    pass
 
-            # Look for contribution table rows
-            # Pattern: StartDate EndDate Days IBC Employer
+            if page_text:
+                total_non_empty_pages += 1
+                total_text += page_text + "\n"
+
+            lines = [
+                cls.sanitize_text(ln) for ln in page_text.splitlines() if ln.strip()
+            ]
+            uninterpreted_lines: list[str] = []
+            page_fragments = len(lines)
+
             for row_idx, line in enumerate(lines):
-                dates_found = cls.DATE_PATTERN.findall(line)
-                if len(dates_found) >= 2:
-                    d1_str = (
-                        f"{dates_found[0][0]}/{dates_found[0][1]}/{dates_found[0][2]}"
-                    )
-                    d2_str = (
-                        f"{dates_found[1][0]}/{dates_found[1][1]}/{dates_found[1][2]}"
-                    )
-                    p_start = cls.parse_colombian_date(d1_str)
-                    p_end = cls.parse_colombian_date(d2_str)
+                # Search for start and end dates
+                date_matches = list(cls.DATE_PATTERN.finditer(line))
+                if len(date_matches) >= 2:
+                    m1, m2 = date_matches[0], date_matches[1]
+                    p_start = cls.parse_colombian_date(m1.group(0))
+                    p_end = cls.parse_colombian_date(m2.group(0))
 
                     if p_start and p_end:
-                        # Extract numbers from line
-                        numbers = re.findall(r"\b\d+(?:[.,]\d+)?\b", line)
-                        # Assume days is the 3rd or 4th integer, IBC is the largest number
-                        days = 30
-                        ibc = Decimal(1300000)
-                        for num in numbers:
-                            val = cls.parse_colombian_decimal(num)
-                            if 1 <= val <= 31 and days == 30:
-                                days = int(val)
-                            elif val > Decimal(100000):
-                                ibc = val
+                        # CRITICAL FIX (Finding 2.1): Strip date substrings from line
+                        # so date digits are NEVER confused with days or salary!
+                        remainder = (
+                            line[: m1.start()]
+                            + " "
+                            + line[m1.end() : m2.start()]
+                            + " "
+                            + line[m2.end() :]
+                        )
+                        remainder = remainder.strip()
 
-                        # Remaining tokens as employer
-                        employer = "EMPLEADOR REPORTADO"
-                        words = [
-                            w for w in line.split() if not any(c.isdigit() for c in w)
-                        ]
-                        if words:
-                            employer = " ".join(words[:4])
+                        # Extract money token (IBC)
+                        money_match = cls.MONEY_TOKEN_PATTERN.search(remainder)
+                        ibc_val = Decimal(0)
+                        if money_match:
+                            ibc_val = cls.parse_colombian_decimal(money_match.group(1))
+                            # Remove money token from remainder before extracting days
+                            remainder = (
+                                remainder[: money_match.start()]
+                                + " "
+                                + remainder[money_match.end() :]
+                            )
+                            remainder = remainder.strip()
+                        else:
+                            report.warnings.append(
+                                f"Fila {row_idx + 1}: IBC no detectado con certeza (IBC_AMBIGUO)."
+                            )
+
+                        # Extract days token (1 to 31)
+                        days_match = cls.DAYS_PATTERN.search(remainder)
+                        days_val = 0
+                        if days_match:
+                            days_val = int(days_match.group(1))
+                            # Remove days token
+                            remainder = (
+                                remainder[: days_match.start()]
+                                + " "
+                                + remainder[days_match.end() :]
+                            )
+                            remainder = remainder.strip()
+                        else:
+                            # If days token is absent, calculate elapsed calendar days if <= 31
+                            span_days = (p_end - p_start).days + 1
+                            if 1 <= span_days <= 31:
+                                days_val = span_days
+                            else:
+                                report.warnings.append(
+                                    f"Fila {row_idx + 1}: Días cotizados inciertos (COBERTURA_PARCIAL_INCIERTA)."
+                                )
+
+                        # Clean employer name
+                        employer = remainder.replace("$", "").replace("COP", "").strip()
+                        employer = re.sub(r"\s+", " ", employer)
+                        if not employer:
+                            employer = "EMPLEADOR REPORTADO"
 
                         rec = CotizacionRecord(
                             periodo_inicio=p_start,
                             periodo_fin=p_end,
-                            dias_reportados=days,
-                            dias_cotizados=days,
-                            ibc=ibc,
+                            dias_reportados=days_val,
+                            dias_cotizados=days_val,
+                            ibc=ibc_val,
                             aportante=employer,
                             origen=ProvenanceType.PDF,
                             pagina=page_idx + 1,
                             fila=row_idx + 1,
                         )
                         records.append(rec)
+                    else:
+                        uninterpreted_lines.append(line)
+                elif any(
+                    k in line.upper() for k in ("COTIZAC", "EMPRESA", "APORTE", "IBC")
+                ):
+                    uninterpreted_lines.append(line)
 
-        # Extract metadata from total text
-        # Birth date
+            audit.pages_audit.append(
+                PageExtractionAudit(
+                    page_number=page_idx + 1,
+                    method=method,
+                    text_length=len(page_text),
+                    fragments_detected=page_fragments,
+                    uninterpreted_lines=uninterpreted_lines[:10],
+                )
+            )
+
+        # Detect completely empty or scanned PDF without text
+        if total_non_empty_pages == 0 or len(total_text.strip()) == 0:
+            report.error_message = "PDF_VACIO: El documento PDF no contiene texto digital ni se pudieron extraer capas legibles."
+            report.warnings.append(
+                "Documento escaneado sin texto o completamente vacío (PDF_SIN_TEXTO_OCR_LOCAL)."
+            )
+            audit.extraction_status = "INCOMPLETA"
+            AuditService.log_technical(
+                exec_id,
+                AuditStep.EXTRACCION_PDF,
+                "ColpensionesPDFReader",
+                0.0,
+                AuditSeverity.ADVERTENCIA,
+                EventCode.PDF_VACIO,
+                "BLOQUEADO",
+                "PDF sin texto",
+                "Solicitar versión digitalizada con texto",
+            )
+            doc.close()
+            return None, report
+
+        # Extract metadata from sanitized total text
         m_birth = re.search(
             r"(?:Fecha\s+de\s+Nacimiento|Nacimiento)[:\s]+(\d{2}[/.-]\d{2}[/.-]\d{4})",
             total_text,
@@ -211,8 +362,17 @@ class ColpensionesPDFReader:
         )
         if m_birth:
             historia.fecha_nacimiento = cls.parse_colombian_date(m_birth.group(1))
+            audit.detected_fields.append(
+                DataFieldAudit(
+                    "fecha_nacimiento",
+                    m_birth.group(0),
+                    str(historia.fecha_nacimiento),
+                    "fecha",
+                    "PDF",
+                    "VERIFICADO",
+                )
+            )
 
-        # Sex / Category
         m_sex = re.search(
             r"(?:Sexo|G[eé]nero)[:\s]+(FEMENINO|MASCULINO|MUJER|HOMBRE|F|M)\b",
             total_text,
@@ -224,8 +384,17 @@ class ColpensionesPDFReader:
                 historia.sexo = SexCategory.FEMENINO
             elif val_s in ("MASCULINO", "HOMBRE", "M"):
                 historia.sexo = SexCategory.MASCULINO
+            audit.detected_fields.append(
+                DataFieldAudit(
+                    "sexo",
+                    m_sex.group(0),
+                    historia.sexo.value if historia.sexo else "",
+                    "categoria",
+                    "PDF",
+                    "VERIFICADO",
+                )
+            )
 
-        # Report date
         m_exp = re.search(
             r"(?:Fecha\s+de\s+Expedici[oó]n|Expedici[oó]n|Actualizaci[oó]n)[:\s]+(\d{2}[/.-]\d{2}[/.-]\d{4})",
             total_text,
@@ -236,8 +405,17 @@ class ColpensionesPDFReader:
                 m_exp.group(1)
             )
             historia.fecha_expedicion_reporte = historia.fecha_actualizacion_reporte
+            audit.detected_fields.append(
+                DataFieldAudit(
+                    "fecha_actualizacion_reporte",
+                    m_exp.group(0),
+                    str(historia.fecha_actualizacion_reporte),
+                    "fecha",
+                    "PDF",
+                    "VERIFICADO",
+                )
+            )
 
-        # Colpensiones summary recognized weeks
         m_weeks = re.search(
             r"(?:Total\s+Semanas|Semanas\s+Cotizadas|Total\s+de\s+semanas)[:\s]+([0-9.,]+)",
             total_text,
@@ -247,8 +425,17 @@ class ColpensionesPDFReader:
             historia.semanas_resumen_colpensiones = cls.parse_colombian_decimal(
                 m_weeks.group(1)
             )
+            audit.detected_fields.append(
+                DataFieldAudit(
+                    "semanas_resumen_colpensiones",
+                    m_weeks.group(0),
+                    float(historia.semanas_resumen_colpensiones),
+                    "semanas",
+                    "PDF",
+                    "VERIFICADO",
+                )
+            )
 
-        # High risk weeks
         m_hr = re.search(
             r"(?:Alto\s+Riesgo|Semanas\s+de\s+Alto\s+Riesgo)[:\s]+([0-9.,]+)",
             total_text,
@@ -260,7 +447,6 @@ class ColpensionesPDFReader:
                 historia.es_caso_especial = True
                 historia.detalle_caso_especial = f"Registra {historia.semanas_alto_riesgo} semanas de alto riesgo (Decreto 2090 de 2003)."
 
-        # Affiliation status
         if re.search(r"\bPENSIONADO\b", total_text, re.IGNORECASE):
             historia.estado_afiliacion = AffiliationStatus.PENSIONADO
         elif re.search(r"\bACTIVO\b", total_text, re.IGNORECASE):
@@ -268,7 +454,6 @@ class ColpensionesPDFReader:
         elif re.search(r"\bINACTIVO\b", total_text, re.IGNORECASE):
             historia.estado_afiliacion = AffiliationStatus.INACTIVO
 
-        # Affiliation date vs first cotizacion
         m_af = re.search(
             r"(?:Fecha\s+de\s+Afiliaci[oó]n)[:\s]+(\d{2}[/.-]\d{2}[/.-]\d{4})",
             total_text,
@@ -285,6 +470,19 @@ class ColpensionesPDFReader:
         historia.registros = records
         report.records_extracted = len(records)
         report.success = True
+        audit.extraction_status = "COMPLETA" if records else "ADVERTENCIA"
+
+        AuditService.log_technical(
+            exec_id,
+            AuditStep.EXTRACCION_PDF,
+            "ColpensionesPDFReader",
+            0.0,
+            AuditSeverity.INFO,
+            EventCode.PDF_CARGADO,
+            "COMPLETADO",
+            f"Extraídos {len(records)} registros en {doc.page_count} páginas",
+            "Continuar a validación documental",
+        )
 
         doc.close()
         return historia, report

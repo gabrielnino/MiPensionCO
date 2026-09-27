@@ -18,7 +18,7 @@ Valores oficiales respaldados por sus decretos ejecutivos anuales en Colombia:
 | **2023** | $1.160.000,00 | $38.666,67 | Decreto 2613 de 2022 |
 | **2024** | $1.300.000,00 | $43.333,33 | Decreto 2292 de 2023 |
 | **2025** | $1.423.500,00 | $47.450,00 | Decreto 1572 de 2024 |
-| **2026** | $1.537.380,00 | $51.246,00 | Decreto Oficial 2026 |
+| **2026** | $1.750.905,00 | $58.363,50 | Decreto 159 de 2026 (Transitorio tras medida cautelar Consejo de Estado) |
 
 ---
 
@@ -27,6 +27,7 @@ Valores oficiales respaldados por sus decretos ejecutivos anuales en Colombia:
 - **Serie Oficial:** Serie de Empalme Base Diciembre 2018 = 100,00.
 - **Entidad Emisora:** Departamento Administrativo Nacional de Estadística (DANE).
 - **Cobertura Observada:** Índices mensuales históricos continuos desde enero de 1990 hasta agosto de 2026.
+- **Tratamiento Períodos Anteriores a 1990:** La serie oficial de empalme DANE Base 2018 inicia en 1990. Para cotizaciones anteriores, el sistema exige ingresar explícitamente el supuesto de indexación o reporta falta de serie oficial en lugar de sustituirla silenciosamente por el índice de 1990 (Hallazgo 2.6).
 - **Fórmula de Actualización:**  
   $$\text{IBC Actualizado} = \text{IBC Nominal} \times \frac{\text{IPC}(\text{Fecha de Corte / Retiro})}{\text{IPC}(\text{Fecha del Aporte})}$$
 
