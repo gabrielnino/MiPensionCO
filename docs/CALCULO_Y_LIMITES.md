@@ -16,15 +16,18 @@ flowchart TD
     A[Carga de Historia Laboral PDF] --> B[Extracción y Revisión Local]
     B --> C{Evaluación Transición\nLey 2381 Art. 75 / C-264}
     C -- No cumple o Info Insuficiente --> D[Detener Simulación y Explicar Causa]
-    C -- Evidencia Suficiente --> E[Calcular Horizonte de Edad Legal]
-    E --> F[Computar Semanas a la Edad Ordinaria\n57 Mujeres / 62 Hombres]
+    C -- Evidencia Suficiente --> E[Calcular Horizonte de Edad Legal\n57 Mujeres / 62 Hombres]
+    E --> F[Cómputo de Semanas a la Edad Ordinaria\nCorte Estricto al Horizonte Legal]
     F --> G{¿Cumple Semanas Exigidas?\nC-197 Mujeres / L.797 Hombres}
     G -- Faltan Semanas --> H[Mostrar Déficit Pensional\nNO se calcula mesada pagadera]
+    G -- Discrepancia Material --> H2[Bloqueo por Discrepancia Documental\nExige Revisión Previa]
     G -- Semanas Completas --> I[Calcular IBL Ordinario vs Toda la Vida\nSL18546-2016 / L.100 Art. 21]
-    I --> J[Tasa de Reemplazo\nLey 797 Art. 10 & SL810-2023]
-    J --> K[Garantía Mínima 1 SMLMV / Tope 25 SMLMV]
-    K --> L[Descuentos de Salud 4-10-12% y FSP 1-2%]
-    L --> M[Resultados, Valor Real y Exportación Local]
+    I --> J{¿IPC Histórico Disponible?}
+    J -- Falta Mes Oficial --> J2[Bloqueo por IPC Faltante\nSin promedios inventados]
+    J -- Serie Completa DANE --> K[Tasa de Reemplazo\nLey 797 Art. 10 & SL810-2023]
+    K --> L[Garantía Mínima 1 SMLMV / Tope 25 SMLMV]
+    L --> M[Descuentos de Salud 4-10-12% y FSP 1-2%]
+    M --> N[Resultados, Valor Real y Exportación Local]
 ```
 
 ### 2.1 Evaluación del Régimen de Transición (Artículo 75 Ley 2381 / C-264 de 2026)
@@ -35,51 +38,39 @@ flowchart TD
 - **Regla de Exclusión:** Semanas cotizadas con posterioridad a la fecha de corte no se computan para alcanzar el umbral de transición.
 - **Información Incompleta:** Si el total es inferior pero se declaran períodos faltantes o no certificados, el sistema declara `INFORMACION_INSUFICIENTE` y no concluye falsamente una exclusión.
 
-### 2.2 Cómputo de Semanas (Días Calendario vs Mes Comercial)
-- De acuerdo con la jurisprudencia de la Sala de Casación Laboral de la Corte Suprema de Justicia (**Sentencia SL138-2024**):
-  - El mes comercial de 30 días aplica para la facturación de aportes patronales.
-  - La contabilización de semanas para la pensión se realiza por **días calendario reales** (cada 7 días calendario de cotización efectiva equivalen a una semana).
-  - En caso de empleadores simultáneos en el mismo día calendario, **no se duplican los días**.
-  - **Períodos parciales:** Se computa estrictamente el menor valor entre los días cotizados y los días calendario del intervalo (`min(dias_cotizados, span_dias)`), impidiendo que un reporte de 1 día en un mes completo se sobreestime a 4.42 semanas (Hallazgo 2.4).
-  - Se reconocen los años bisiestos (ej. 29 de febrero de 2024).
+### 2.2 Cómputo de Semanas y Separación de Convenciones (CSJ SL138-2024)
+- **Semanas por días calendario reales:** La semana pensional se determina por días calendario efectivos divididos entre 7 (7 días = 1 semana). Enero completo equivale a 31 días (4.4285 semanas), febrero en año bisiesto a 29 días (4.1428 semanas) y meses de 30 días a 4.2857 semanas.
+- **Convención comercial de 30 días:** Aplica estrictamente para la facturación de aportes patronales e indexación de IBC mensual, no como límite superior de días calendario.
+- **Períodos parciales:** Se computa `min(dias_cotizados, span_dias)` para no sobreestimar semanas.
+- **No duplicación por simultaneidad:** Dos o más aportantes en el mismo día calendario se unifican sin duplicar días.
+- **Pausas parciales sin eliminación de mes:** Las pausas dentro de un mes se descuentan restando únicamente los días calendario en que hubo suspensión efectiva de aportes (`active_cal_days = span_cal_days - paused_days`), unificando previamente intervalos de pausas que se superpongan para evitar dobles deducciones.
 
-### 2.3 Requisitos de Edad y Semanas para Pensión Ordinaria de Vejez
-- **Hombres:** 62 años de edad y 1.300 semanas ordinarias (Ley 797 de 2003, Art. 9).
-- **Mujeres:** 57 años de edad. En aplicación de la Sentencia **C-197 de 2023** y la confirmación operativa de Colpensiones, el requisito de semanas se reduce progresivamente según el año de cumplimiento de los 57 años:
-  - 2025: 1.300 semanas
-  - 2026: 1.250 semanas
-  - 2027: 1.225 semanas
-  - 2028: 1.200 semanas
-  - 2029: 1.175 semanas
-  - 2030: 1.150 semanas
-  - 2031: 1.125 semanas
-  - 2032: 1.100 semanas
-  - 2033: 1.075 semanas
-  - 2034: 1.050 semanas
-  - 2035: 1.025 semanas
-  - 2036 en adelante: 1.000 semanas
+### 2.3 Proyección Futura y No Invasión del Pasado Desconocido
+- **Horizonte fijo:** Las semanas y el IBL se calculan a la fecha exacta de cumplimiento de la edad legal ordinaria (57 años mujeres, 62 años hombres). No se proyectan aportes posteriores a esa fecha.
+- **Proyecciones futuras estrictamente hacia adelante:** Las proyecciones hipotéticas de escenarios (`semanas_futuras_proyectadas`) inician estrictamente después de la fecha de evaluación (`today`). No se generan aportes futuros sobre el pasado desconocido entre el último certificado y el presente.
+- **Aportes declarados:** Si el usuario ingresa un escenario con fecha de inicio anterior a la evaluación, los períodos entre el último reporte y la evaluación se modelan y auditan por separado como aportes declarados (`ProvenanceType.DECLARACION_USUARIO`).
+- **Exclusión de cotizaciones post-horizonte:** Para afiliados que ya cumplieron la edad legal ordinaria en el pasado, todas las cotizaciones con `periodo_inicio > fecha_cumplimiento_edad_legal` se excluyen de la liquidación a la edad legal. Los registros que cruzan la fecha de cumplimiento de edad se prorratean exactamente hasta el día de cumpleaños.
 
-### 2.4 Ingreso Base de Liquidación (IBL)
-- **Regla General (10 Años Efectivos):** Conforme a la Sentencia **SL18546-2016**, los 10 años corresponden a los últimos 3.650 días de **cotizaciones efectivas**, indexados mes a mes con el IPC del DANE y ponderados por el tiempo cotizado. No se toman mecánicamente meses calendario vacíos como ceros.
-- **Unificación de Empleadores Simultáneos:** En aplicación de la Ley 100 de 1993 (Art. 18 parágrafo 1) y el Decreto 1833 de 2016, las cotizaciones simultáneas en un mismo mes calendario unifican sus IBCs (hasta el tope de 25 SMLMV del año respectivo) para un cómputo mensual máximo de 30 días efectivos, evitando dilución salarial o doble conteo temporal (Hallazgo 2.7).
-- **Exclusión de Cotizaciones Post-Horizonte:** Al evaluar el cumplimiento a la edad legal ordinaria en fechas pasadas, las cotizaciones efectuadas con posterioridad a dicho horizonte quedan estrictamente excluidas de la liquidación de dicho momento (Hallazgo 2.8).
-- **Bloqueo por Ausencia de Salarios:** Si la historia laboral solo contiene semanas documentales pero carece por completo de registros salariales o IBCs verificables, el simulador bloquea expresamente el cálculo de la mesada (`IBL_INSUFICIENTE_DATOS_SALARIALES`) impidiendo asignar indebidamente una mesada mínima de 1 SMLMV sin respaldo (Hallazgo 2.3).
-- **Opción de Toda la Vida Laboral:** Procede según el artículo 21 de la Ley 100 de 1993 únicamente cuando el afiliado acredite al menos **1.250 semanas cotizadas** y el promedio de toda la vida actualizado resulte superior al de los últimos 10 años. La reducción de semanas para mujeres no rebaja este umbral específico de 1.250 semanas.
+### 2.4 No Selección Arbitraria de Semanas (Documental vs Recálculo)
+- Se eliminó el uso de `base_weeks = max(semanas_doc, semanas_cal)`.
+- El sistema mantiene separados:
+  1. `semanas_acreditadas_documentales`: total certificado por Colpensiones en el resumen del PDF.
+  2. `semanas_recalculadas_calendario`: sumatoria real de días calendario dividida entre 7 de los períodos desglosados.
+- **Criterio de Discrepancia:** Si el resumen documental no alcanza el umbral de semanas exigidas pero el recálculo sí lo supera, o si la diferencia altera un bloque completo de 50 semanas para incrementos de tasa de reemplazo, el sistema marca `requiere_revision_discrepancia = True`, advierte al afiliado y bloquea el reconocimiento automático de la mesada hasta que se aclare la consistencia probatoria.
 
-### 2.5 Tasa de Reemplazo y Mesada Bruta (Ley 797 Art. 10 y SL810-2023)
-- Relación con el salario mínimo de retiro: $s = \frac{\text{IBL}}{\text{SMLMV}}$.
-- Tasa inicial: $r_{\text{inicial}} = 65.50\% - 0.50 \times s$.
-- Incremento por semanas adicionales: $+1.5\%$ por cada bloque completo de **50 semanas** adicionales a las mínimas requeridas.
-- **Jurisprudencia SL3501-2022 y SL810-2023:** No existe tope universal de 1.800 semanas; las semanas adicionales a 1.800 se computan para alcanzar el tope máximo del **80.00%**.
-- **Límites Legales de Mesada:**
-  - Garantía de Pensión Mínima: Ninguna pensión puede ser inferior a **1 SMLMV**.
-  - Tope Máximo: Ninguna pensión en Colpensiones puede exceder **25 SMLMV**.
+### 2.5 Indexación con IPC Oficial y Tratamiento de Meses Faltantes
+- Toda actualización de bases salariales utiliza la serie oficial de empalme histórico del DANE (Base Diciembre 2018 = 100) mes a mes.
+- **Cero promedios inventados:** Se eliminó cualquier sustitución silenciosa de meses faltantes por promedios anuales.
+- Si un mes histórico requerido para liquidar los 10 años o toda la vida laboral no existe en la serie oficial verificada, el motor lanza `IPCFaltanteError` y devuelve un resultado bloqueado transparente (`bloqueado_por_ipc = True`), explicando la causa al usuario.
 
-### 2.6 Descuentos de Ley a Pensionados
-- **Aporte a Salud:**
-  - Mesada igual a 1 SMLMV: **4.0%**
-  - Mesada superior a 1 y hasta 3 SMLMV: **10.0%**
-  - Mesada superior a 3 SMLMV: **12.0%**
-- **Fondo de Solidaridad Pensional (Subcuenta de Subsistencia):**
-  - Mesadas entre 10 y 20 SMLMV: **1.0%**
-  - Mesadas superiores a 20 SMLMV: **2.0%**
+---
+
+## 3. Límites Legales y Descuentos Obligatorios
+
+| Concepto | Fundamento Legal | Límite / Porcentaje Aplicable |
+| :--- | :--- | :--- |
+| **Pensión Mínima** | Ley 100 de 1993, Art. 35 | Ninguna pensión puede ser inferior a **1 SMLMV** del año de retiro. |
+| **Pensión Máxima** | Ley 797 de 2003, Art. 18 par. 1 / Acto Leg. 01/2005 | Ninguna pensión pública puede superar **25 SMLMV** vigentes. |
+| **Tope de Tasa** | CSJ SL810-2023 / Ley 797 Art. 10 | Las semanas sobre 1.800 incrementan la tasa en 1.5% por cada 50 semanas hasta el tope absoluto del **80.00%**. |
+| **Aporte a Salud** | Ley 2010 de 2019 / Ley 2294 de 2023 | 4% para mesadas de 1 SMLMV; 10% para >1 hasta 3 SMLMV; 12% para >3 SMLMV. |
+| **Fondo Solidaridad (FSP)** | Ley 100 de 1993, Art. 27 / D. 1833 de 2016 | 0% hasta 10 SMLMV; 1% para >10 hasta 20 SMLMV; 2% para >20 SMLMV. |

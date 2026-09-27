@@ -57,6 +57,8 @@ class CotizacionRecord:
     origen: ProvenanceType = ProvenanceType.PDF
     pagina: int = 1
     fila: int = 1
+    dias_pendientes_validacion: bool = False
+    source_fragment_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +67,7 @@ class CotizacionRecord:
             "dias_reportados": self.dias_reportados,
             "dias_cotizados": self.dias_cotizados,
             "ibc": float(self.ibc),
+            "ibc_exacto": str(self.ibc),
             "aportante": self.aportante,
             "nit": self.nit,
             "novedad": self.novedad,
@@ -73,6 +76,8 @@ class CotizacionRecord:
             "origen": self.origen.value,
             "pagina": self.pagina,
             "fila": self.fila,
+            "dias_pendientes_validacion": self.dias_pendientes_validacion,
+            "source_fragment_ids": list(self.source_fragment_ids),
         }
 
 
@@ -191,6 +196,9 @@ class SimulationResult:
     equivalente_smlmv: Decimal | None
     mensaje_advertencia: str
     desglose_explicativo: list[str]
+    requiere_revision_discrepancia: bool = False
+    bloqueado_por_ipc: bool = False
+    bloqueado_por_periodo_desconocido: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,26 +211,44 @@ class SimulationResult:
             "semanas_acreditadas_documentales": float(
                 self.semanas_acreditadas_documentales
             ),
+            "semanas_acreditadas_documentales_exacto": str(
+                self.semanas_acreditadas_documentales
+            ),
             "semanas_recalculadas_calendario": float(
+                self.semanas_recalculadas_calendario
+            ),
+            "semanas_recalculadas_calendario_exacto": str(
                 self.semanas_recalculadas_calendario
             ),
             "diferencia_semanas_recalculadas": float(
                 self.diferencia_semanas_recalculadas
             ),
             "semanas_futuras_proyectadas": float(self.semanas_futuras_proyectadas),
+            "semanas_futuras_proyectadas_exacto": str(self.semanas_futuras_proyectadas),
             "semanas_totales_a_la_edad": float(self.semanas_totales_a_la_edad),
+            "semanas_totales_a_la_edad_exacto": str(self.semanas_totales_a_la_edad),
             "cumple_semanas": self.cumple_semanas,
             "deficit_semanas": float(self.deficit_semanas),
+            "deficit_semanas_exacto": str(self.deficit_semanas),
             "excedente_semanas": float(self.excedente_semanas),
+            "excedente_semanas_exacto": str(self.excedente_semanas),
             "ibl_ultimos_10_anos": float(self.ibl_ultimos_10_anos)
+            if self.ibl_ultimos_10_anos
+            else None,
+            "ibl_ultimos_10_anos_exacto": str(self.ibl_ultimos_10_anos)
             if self.ibl_ultimos_10_anos
             else None,
             "ibl_toda_la_vida": float(self.ibl_toda_la_vida)
             if self.ibl_toda_la_vida
             else None,
+            "ibl_toda_la_vida_exacto": str(self.ibl_toda_la_vida)
+            if self.ibl_toda_la_vida
+            else None,
             "metodo_ibl_seleccionado": self.metodo_ibl_seleccionado,
             "ibl_final": float(self.ibl_final) if self.ibl_final else None,
+            "ibl_final_exacto": str(self.ibl_final) if self.ibl_final else None,
             "smlmv_referencia_retiro": float(self.smlmv_referencia_retiro),
+            "smlmv_referencia_retiro_exacto": str(self.smlmv_referencia_retiro),
             "s_factor": float(self.s_factor) if self.s_factor else None,
             "tasa_reemplazo_inicial_pct": float(self.tasa_reemplazo_inicial_pct)
             if self.tasa_reemplazo_inicial_pct
@@ -240,6 +266,9 @@ class SimulationResult:
             if self.tasa_reemplazo_final_pct
             else None,
             "mesada_bruta": float(self.mesada_bruta) if self.mesada_bruta else None,
+            "mesada_bruta_exacto": str(self.mesada_bruta)
+            if self.mesada_bruta
+            else None,
             "limite_aplicado": self.limite_aplicado,
             "descuento_salud_pct": float(self.descuento_salud_pct)
             if self.descuento_salud_pct
@@ -256,6 +285,9 @@ class SimulationResult:
             "valor_despues_descuentos": float(self.valor_despues_descuentos)
             if self.valor_despues_descuentos
             else None,
+            "valor_despues_descuentos_exacto": str(self.valor_despues_descuentos)
+            if self.valor_despues_descuentos
+            else None,
             "valor_real_poder_adquisitivo": float(self.valor_real_poder_adquisitivo)
             if self.valor_real_poder_adquisitivo
             else None,
@@ -264,4 +296,7 @@ class SimulationResult:
             else None,
             "mensaje_advertencia": self.mensaje_advertencia,
             "desglose_explicativo": self.desglose_explicativo,
+            "requiere_revision_discrepancia": self.requiere_revision_discrepancia,
+            "bloqueado_por_ipc": self.bloqueado_por_ipc,
+            "bloqueado_por_periodo_desconocido": self.bloqueado_por_periodo_desconocido,
         }

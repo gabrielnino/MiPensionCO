@@ -8,6 +8,7 @@ Manages:
 
 import json
 import logging
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -62,7 +63,17 @@ class AuditService:
         technical_cause: str,
         action_required: str,
     ) -> None:
-        """Appends a sanitized technical entry without any personal or financial PII."""
+        """Appends a sanitized technical entry without any personal or financial PII.
+
+        Filters out freeform user values, mesada/salary numbers, and names.
+        """
+        import re
+
+        clean_cause = re.sub(r"\$[\s0-9.,]+", "[VALOR_PROTEGIDO]", technical_cause)
+        clean_cause = re.sub(r"\b[0-9]{5,}\b", "[ID_PROTEGIDO]", clean_cause)
+        clean_action = re.sub(r"\$[\s0-9.,]+", "[VALOR_PROTEGIDO]", action_required)
+        clean_action = re.sub(r"\b[0-9]{5,}\b", "[ID_PROTEGIDO]", clean_action)
+
         entry = TechnicalLogEntry(
             timestamp_iso=datetime.now(timezone.utc).isoformat(),
             execution_id=execution_id,
@@ -72,8 +83,8 @@ class AuditService:
             severity=severity,
             event_code=event_code,
             status=status,
-            technical_cause=technical_cause,
-            action_required=action_required,
+            technical_cause=clean_cause,
+            action_required=clean_action,
         )
         try:
             with open(TECH_LOG_FILE, "a", encoding="utf-8") as f:
@@ -86,8 +97,9 @@ class AuditService:
         cls, execution_id: str | None = None
     ) -> DocumentAuditRecord:
         """Retrieves or initializes in-memory audit record for an execution."""
-        if not execution_id:
+        if not execution_id or not re.match(r"^[a-zA-Z0-9_-]+$", execution_id):
             execution_id = str(uuid.uuid4())
+
         if execution_id not in cls._active_audits:
             cls._active_audits[execution_id] = DocumentAuditRecord(
                 execution_id=execution_id
@@ -100,13 +112,30 @@ class AuditService:
     ) -> None:
         """Records scenario calculation audit in memory."""
         audit = cls.get_or_create_audit(execution_id)
-        audit.scenarios_audit.append(scenario_audit)
+        # Update or append scenario audit by scenario_id
+        existing_idx = next(
+            (
+                idx
+                for idx, s in enumerate(audit.scenarios_audit)
+                if s.scenario_id == scenario_audit.scenario_id
+            ),
+            None,
+        )
+        if existing_idx is not None:
+            audit.scenarios_audit[existing_idx] = scenario_audit
+        else:
+            audit.scenarios_audit.append(scenario_audit)
 
     @classmethod
     def save_audit_locally(
         cls, execution_id: str, enable_sensitive_save: bool = True
     ) -> Path | None:
         """Atomically saves full calculation and documentary audit to disk if enabled by user."""
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9_-]+$", execution_id):
+            raise ValueError("Identificador de ejecución no válido.")
+
         if execution_id not in cls._active_audits:
             return None
         audit = cls._active_audits[execution_id]
@@ -115,22 +144,27 @@ class AuditService:
         if not enable_sensitive_save:
             return None
 
+        AUDIT_DIR.mkdir(parents=True, exist_ok=True)
         file_path = AUDIT_DIR / f"audit_{execution_id}.json"
         atomic_write_json(file_path, audit.to_dict())
         return file_path
 
     @classmethod
     def purge_session(
-        cls, execution_id: str | None = None, purge_disk: bool = True
+        cls, execution_id: str | None = None, purge_disk: bool = False
     ) -> None:
-        """Purges memory session and optionally deletes disk audit files."""
-        if execution_id and execution_id in cls._active_audits:
-            del cls._active_audits[execution_id]
+        """Purges memory session and optionally deletes disk audit files if requested."""
+        import re
+
+        if execution_id:
+            if not re.match(r"^[a-zA-Z0-9_-]+$", execution_id):
+                raise ValueError("Identificador de ejecución no válido.")
+            cls._active_audits.pop(execution_id, None)
             if purge_disk:
                 target = AUDIT_DIR / f"audit_{execution_id}.json"
                 if target.exists():
                     target.unlink()
-        elif not execution_id:
+        else:
             cls._active_audits.clear()
             if purge_disk and AUDIT_DIR.exists():
                 for f in AUDIT_DIR.glob("audit_*.json"):
@@ -181,29 +215,36 @@ class AuditService:
                 md.append(
                     f"- **Horizonte Fijo:** {s.fixed_horizon_date} ({s.legal_retirement_age} años)"
                 )
-                md.append(
-                    f"- **IBL Liquidado:** ${s.ibl_final:,.0f} COP ({s.ibl_method_chosen})"
-                    if s.ibl_final
-                    else "- **IBL:** N/A"
+                ibl_str = f"${float(s.ibl_final):,.0f} COP" if s.ibl_final else "N/A"
+                gross_str = (
+                    f"${float(s.gross_pension):,.0f} COP" if s.gross_pension else "N/A"
                 )
+                salud_monto_str = (
+                    f"${float(s.health_discount_amount):,.0f}"
+                    if s.health_discount_amount
+                    else "$0"
+                )
+                fsp_monto_str = (
+                    f"${float(s.fsp_discount_amount):,.0f}"
+                    if s.fsp_discount_amount
+                    else "$0"
+                )
+                net_str = (
+                    f"${float(s.net_pension_after_discounts):,.0f} COP"
+                    if s.net_pension_after_discounts
+                    else "N/A"
+                )
+                md.append(f"- **IBL Liquidado:** {ibl_str} ({s.ibl_method_chosen})")
                 md.append(
                     f"- **Tasa de Reemplazo:** {s.replacement_rate_final_pct}% (Inicial: {s.replacement_rate_initial_pct}%)"
                 )
                 md.append(
-                    f"- **Mesada Bruta:** ${s.gross_pension:,.0f} COP | Límite: {s.limit_applied}"
-                    if s.gross_pension
-                    else ""
+                    f"- **Mesada Bruta:** {gross_str} | Límite: {s.limit_applied}"
                 )
                 md.append(
-                    f"- **Descuentos:** Salud ({s.health_discount_pct}% = ${s.health_discount_amount:,.0f}) | FSP ({s.fsp_discount_pct}% = ${s.fsp_discount_amount:,.0f})"
-                    if s.health_discount_amount is not None
-                    else ""
+                    f"- **Descuentos:** Salud ({s.health_discount_pct}% = {salud_monto_str}) | FSP ({s.fsp_discount_pct}% = {fsp_monto_str})"
                 )
-                md.append(
-                    f"- **Valor Estimado tras Descuentos:** ${s.net_pension_after_discounts:,.0f} COP"
-                    if s.net_pension_after_discounts
-                    else ""
-                )
+                md.append(f"- **Valor Estimado tras Descuentos:** {net_str}")
             md.append("")
             md.append("#### Desglose de Operaciones Reales")
             for op in s.step_by_step_operations:

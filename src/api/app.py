@@ -4,8 +4,9 @@ Runs exclusively on local loopback (127.0.0.1).
 Zero external telemetry or cloud communication.
 """
 
+import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,30 @@ from fastapi.responses import (
 )
 from pydantic import BaseModel
 
-from src.audit.models import AuditSeverity, AuditStep, EventCode
+from src.audit.models import (
+    AuditSeverity,
+    AuditStep,
+    EventCode,
+    UserCorrectionAudit,
+)
 from src.audit.service import AuditService
+
+EXEC_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_execution_id(execution_id: str) -> None:
+    """Validates execution ID to prevent path traversal or malformed requests."""
+    if (
+        not execution_id
+        or not EXEC_ID_REGEX.match(execution_id)
+        or ".." in execution_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Identificador de ejecución inválido.",
+        )
+
+
 from src.domain.models import (
     AffiliationStatus,
     CotizacionRecord,
@@ -107,6 +130,14 @@ class SimulateRequestDTO(BaseModel):
     historia: HistoriaLaboralDTO
     escenarios: list[EscenarioInputDTO]
     execution_id: str | None = None
+
+
+class UserCorrectionDTO(BaseModel):
+    execution_id: str
+    target_field: str
+    original_value: str | None = None
+    corrected_value: str
+    reason: str
 
 
 def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
@@ -303,27 +334,54 @@ async def upload_pdf(
 @app.post("/api/evaluate-transition")
 async def evaluate_transition_endpoint(
     historia_dto: HistoriaLaboralDTO,
+    execution_id: str | None = None,
 ) -> JSONResponse:
     """Evaluates transition regime under Ley 2381 Art. 75 and C-264/2026."""
+    if execution_id:
+        validate_execution_id(execution_id)
     historia = dto_to_domain(historia_dto)
     evaluation = PensionEngine.evaluate_transition(
         historia,
         as_of_date=date(2026, 9, 27),
         cutoff_date=TRANSITION_CUTOFF_DATE_C264,
+        execution_id=execution_id,
     )
     return JSONResponse(content=evaluation.to_dict())
+
+
+@app.post("/api/audit/correction")
+async def add_user_correction_endpoint(dto: UserCorrectionDTO) -> JSONResponse:
+    """Registers verified user manual correction in audit trail."""
+    validate_execution_id(dto.execution_id)
+    audit = AuditService.get_or_create_audit(dto.execution_id)
+    corr = UserCorrectionAudit(
+        field_name=dto.target_field,
+        original_value=dto.original_value,
+        corrected_value=dto.corrected_value,
+        reason=dto.reason,
+        provenance="DECLARACION_USUARIO",
+        timestamp_iso=datetime.now(timezone.utc).isoformat(),
+        order=len(audit.user_corrections) + 1,
+        invalidated_evaluations=["transition_evaluation", "scenario_simulations"],
+    )
+    audit.user_corrections.append(corr)
+    return JSONResponse(content={"success": True, "correction": corr.__dict__})
 
 
 @app.post("/api/simulate")
 async def simulate_endpoint(req: SimulateRequestDTO) -> JSONResponse:
     """Executes multi-scenario pension simulation strictly up to legal retirement age."""
+    if req.execution_id:
+        validate_execution_id(req.execution_id)
+
     historia = dto_to_domain(req.historia)
 
-    # First evaluate transition
+    # First evaluate transition and record in audit
     evaluation = PensionEngine.evaluate_transition(
         historia,
         as_of_date=date(2026, 9, 27),
         cutoff_date=TRANSITION_CUTOFF_DATE_C264,
+        execution_id=req.execution_id,
     )
 
     if not evaluation.permite_continuar_simulacion:
@@ -381,8 +439,22 @@ async def simulate_endpoint(req: SimulateRequestDTO) -> JSONResponse:
 @app.get("/api/audit/{execution_id}")
 async def get_audit_endpoint(execution_id: str) -> JSONResponse:
     """Returns detailed in-memory audit record for a given execution ID."""
+    validate_execution_id(execution_id)
     audit = AuditService.get_or_create_audit(execution_id)
     return JSONResponse(content=audit.to_dict())
+
+
+@app.get("/api/audit/{execution_id}/export")
+async def export_audit_endpoint(execution_id: str) -> JSONResponse:
+    """Returns complete downloadable audit JSON."""
+    validate_execution_id(execution_id)
+    audit = AuditService.get_or_create_audit(execution_id)
+    return JSONResponse(
+        content=audit.to_dict(),
+        headers={
+            "Content-Disposition": f'attachment; filename="auditoria_{execution_id}.json"'
+        },
+    )
 
 
 @app.post("/api/audit/{execution_id}/save-local")
@@ -391,6 +463,7 @@ async def save_audit_local_endpoint(
     enable_sensitive_save: bool = True,
 ) -> JSONResponse:
     """Saves complete audit record to local disk with user consent."""
+    validate_execution_id(execution_id)
     saved_path = AuditService.save_audit_locally(
         execution_id, enable_sensitive_save=enable_sensitive_save
     )
@@ -414,6 +487,7 @@ async def save_audit_local_endpoint(
 @app.get("/api/audit/{execution_id}/report.md")
 async def get_audit_markdown_endpoint(execution_id: str) -> PlainTextResponse:
     """Returns Markdown diagnostic report for human review."""
+    validate_execution_id(execution_id)
     report_text = AuditService.generate_markdown_report(execution_id)
     return PlainTextResponse(content=report_text, media_type="text/markdown")
 
@@ -447,9 +521,16 @@ async def get_economic_data() -> JSONResponse:
 
 
 @app.post("/api/reset-session")
-async def reset_session(execution_id: str | None = None) -> JSONResponse:
+async def reset_session(
+    execution_id: str | None = None,
+    delete_persisted_audit: bool = True,
+) -> JSONResponse:
     """Wipes in-memory session data and removes disk audit files."""
-    AuditService.purge_session(execution_id=execution_id, purge_disk=True)
+    if execution_id:
+        validate_execution_id(execution_id)
+    AuditService.purge_session(
+        execution_id=execution_id, purge_disk=delete_persisted_audit
+    )
     if execution_id:
         AuditService.log_technical(
             execution_id,

@@ -70,10 +70,21 @@ class TechnicalLogEntry:
 
     def to_log_line(self) -> str:
         return (
-            f"[{self.timestamp_iso}] [{self.severity.value}] [{self.execution_id[:8]}] "
+            f"[{self.timestamp_iso}] [{self.severity.value}] [{self.execution_id}] "
             f"[{self.step.value}] [{self.event_code.value}] Status: {self.status} "
             f"({self.duration_ms:.1f}ms) - {self.technical_cause} | Acción: {self.action_required}"
         )
+
+
+@dataclass
+class FragmentAudit:
+    fragment_id: str
+    page_number: int
+    order: int
+    raw_text: str
+    coordinates: list[float] | None = None  # [x0, y0, x1, y1]
+    status: str = "INTERPRETADO"  # "INTERPRETADO", "RECHAZADO", "AMBIGUO", "PENDIENTE"
+    explanation: str = ""
 
 
 @dataclass
@@ -82,6 +93,8 @@ class PageExtractionAudit:
     method: str  # "TEXTO_DIRECTO" | "OCR_LOCAL"
     text_length: int
     fragments_detected: int
+    raw_page_text: str = ""
+    fragments: list[dict[str, Any]] = field(default_factory=list)
     uninterpreted_lines: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
 
@@ -97,6 +110,7 @@ class DataFieldAudit:
         str  # "VERIFICADO", "PENDIENTE_REVISION", "AMBIGUO", "INCORRECTO"
     )
     explanation: str = ""
+    source_fragment_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -107,6 +121,7 @@ class UserCorrectionAudit:
     reason: str
     provenance: str
     timestamp_iso: str
+    order: int = 1
     invalidated_evaluations: list[str] = field(default_factory=list)
 
 
@@ -118,24 +133,24 @@ class ScenarioCalculationAudit:
     legal_retirement_age: int
     inputs: dict[str, Any]
     generated_future_periods_count: int
-    weeks_breakdown: dict[str, float]
+    weeks_breakdown: dict[str, str]
     effective_contributions_selected: list[dict[str, Any]]
     ibl_method_chosen: str
-    ibl_final: float | None
-    smlmv_ref: float
-    s_factor: float | None
-    replacement_rate_initial_pct: float | None
+    ibl_final: str | None
+    smlmv_ref: str
+    s_factor: str | None
+    replacement_rate_initial_pct: str | None
     additional_weeks_blocks: int | None
-    replacement_rate_final_pct: float | None
-    gross_pension: float | None
+    replacement_rate_final_pct: str | None
+    gross_pension: str | None
     limit_applied: str
-    health_discount_pct: float | None
-    health_discount_amount: float | None
-    fsp_discount_pct: float | None
-    fsp_discount_amount: float | None
-    net_pension_after_discounts: float | None
-    real_purchasing_power_cop: float | None
-    smlmv_multiples: float | None
+    health_discount_pct: str | None
+    health_discount_amount: str | None
+    fsp_discount_pct: str | None
+    fsp_discount_amount: str | None
+    net_pension_after_discounts: str | None
+    real_purchasing_power_cop: str | None
+    smlmv_multiples: str | None
     is_blocked: bool
     blocking_reason: str | None
     step_by_step_operations: list[str]
@@ -144,7 +159,7 @@ class ScenarioCalculationAudit:
 @dataclass
 class DocumentAuditRecord:
     execution_id: str
-    schema_version: str = "2.0.0"
+    schema_version: str = "2.1.0"
     created_at_iso: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

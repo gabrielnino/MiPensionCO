@@ -607,9 +607,10 @@
 
       <!-- Action & Filter Bar -->
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem; background: #f8fafc; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border);">
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <button class="btn btn-secondary btn-sm" id="btn-save-audit-local" onclick="saveAuditLocally()">💾 Guardar Auditoría en Disco</button>
-          <button class="btn btn-outline btn-sm" onclick="downloadAuditReportMD()">📄 Descargar Reporte (.md)</button>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-save-audit-local" onclick="saveAuditLocally()">💾 Guardar en Disco</button>
+          <button class="btn btn-outline btn-sm" onclick="exportFullAuditJSON()">📦 Exportar Auditoría (.json)</button>
+          <button class="btn btn-outline btn-sm" onclick="downloadAuditReportMD()">📄 Reporte (.md)</button>
         </div>
         <div id="audit-disk-status" style="font-size: 0.8rem; color: var(--text-muted);">
           Memoria local (privacidad garantizada)
@@ -1248,6 +1249,11 @@
     function downloadAuditReportMD() {
       if (!currentExecutionId) return;
       window.open(`/api/audit/${currentExecutionId}/report.md`, '_blank');
+    }
+
+    function exportFullAuditJSON() {
+      if (!currentExecutionId) return;
+      window.open(`/api/audit/${currentExecutionId}/export`, '_blank');
     }
 
     async function openCatalogModal() {

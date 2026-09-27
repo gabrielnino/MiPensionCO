@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 
@@ -233,13 +234,31 @@ class ColpensionesPDFReader:
                 total_non_empty_pages += 1
                 total_text += page_text + "\n"
 
+            # Extract blocks with coordinates for full spatial traceability
+            blocks = page.get_text("blocks")
+            # Map block coordinates to lines if possible
+            block_coords_map: dict[str, list[float]] = {}
+            for b in blocks:
+                b_text = cls.sanitize_text(str(b[4]))
+                if b_text:
+                    block_coords_map[b_text[:30]] = [
+                        float(b[0]),
+                        float(b[1]),
+                        float(b[2]),
+                        float(b[3]),
+                    ]
+
             lines = [
                 cls.sanitize_text(ln) for ln in page_text.splitlines() if ln.strip()
             ]
             uninterpreted_lines: list[str] = []
             page_fragments = len(lines)
+            page_fragment_records: list[dict[str, Any]] = []
 
             for row_idx, line in enumerate(lines):
+                frag_id = f"p{page_idx + 1}_f{row_idx + 1}"
+                coords = block_coords_map.get(line[:30])
+
                 # Search for start and end dates
                 date_matches = list(cls.DATE_PATTERN.finditer(line))
                 if len(date_matches) >= 2:
@@ -248,8 +267,7 @@ class ColpensionesPDFReader:
                     p_end = cls.parse_colombian_date(m2.group(0))
 
                     if p_start and p_end:
-                        # CRITICAL FIX (Finding 2.1): Strip date substrings from line
-                        # so date digits are NEVER confused with days or salary!
+                        # Strip date substrings from line
                         remainder = (
                             line[: m1.start()]
                             + " "
@@ -264,7 +282,6 @@ class ColpensionesPDFReader:
                         ibc_val = Decimal(0)
                         if money_match:
                             ibc_val = cls.parse_colombian_decimal(money_match.group(1))
-                            # Remove money token from remainder before extracting days
                             remainder = (
                                 remainder[: money_match.start()]
                                 + " "
@@ -279,9 +296,10 @@ class ColpensionesPDFReader:
                         # Extract days token (1 to 31)
                         days_match = cls.DAYS_PATTERN.search(remainder)
                         days_val = 0
+                        dias_pendientes = False
+
                         if days_match:
                             days_val = int(days_match.group(1))
-                            # Remove days token
                             remainder = (
                                 remainder[: days_match.start()]
                                 + " "
@@ -289,14 +307,16 @@ class ColpensionesPDFReader:
                             )
                             remainder = remainder.strip()
                         else:
-                            # If days token is absent, calculate elapsed calendar days if <= 31
-                            span_days = (p_end - p_start).days + 1
-                            if 1 <= span_days <= 31:
-                                days_val = span_days
-                            else:
-                                report.warnings.append(
-                                    f"Fila {row_idx + 1}: Días cotizados inciertos (COBERTURA_PARCIAL_INCIERTA)."
-                                )
+                            # CRITICAL FIX (Finding H): Do NOT invent days_val = span_days!
+                            # Explicitly model absence of days: requires user review
+                            days_val = 0
+                            dias_pendientes = True
+                            report.warnings.append(
+                                f"Fila {row_idx + 1}: Días cotizados ausentes en el documento (COBERTURA_PARCIAL_INCIERTA). Requiere validación manual."
+                            )
+                            audit.documentary_discrepancies.append(
+                                f"Fila {row_idx + 1} ({p_start.isoformat()} a {p_end.isoformat()}): Días cotizados ausentes en el documento."
+                            )
 
                         # Clean employer name
                         employer = remainder.replace("$", "").replace("COP", "").strip()
@@ -314,22 +334,82 @@ class ColpensionesPDFReader:
                             origen=ProvenanceType.PDF,
                             pagina=page_idx + 1,
                             fila=row_idx + 1,
+                            dias_pendientes_validacion=dias_pendientes,
+                            source_fragment_ids=(frag_id,),
                         )
                         records.append(rec)
+
+                        # Record fragment audit
+                        frag_status = "AMBIGUO" if dias_pendientes else "INTERPRETADO"
+                        frag_expl = (
+                            "Fila interpretada con días pendientes de validación"
+                            if dias_pendientes
+                            else "Fila de cotización válida extraída"
+                        )
+                        page_fragment_records.append(
+                            {
+                                "fragment_id": frag_id,
+                                "page_number": page_idx + 1,
+                                "order": row_idx + 1,
+                                "raw_text": line,
+                                "coordinates": coords,
+                                "status": frag_status,
+                                "explanation": frag_expl,
+                            }
+                        )
+
+                        # Record field audit
+                        audit.detected_fields.append(
+                            DataFieldAudit(
+                                field_name=f"cotizacion_{rec.periodo_inicio.isoformat()}",
+                                raw_text=line,
+                                parsed_value=f"IBC={ibc_val}, Días={days_val}",
+                                unit="registro",
+                                provenance="PDF",
+                                validation_status="PENDIENTE_REVISION"
+                                if dias_pendientes
+                                else "VERIFICADO",
+                                explanation=frag_expl,
+                                source_fragment_ids=[frag_id],
+                            )
+                        )
                     else:
                         uninterpreted_lines.append(line)
-                elif any(
-                    k in line.upper() for k in ("COTIZAC", "EMPRESA", "APORTE", "IBC")
-                ):
+                        page_fragment_records.append(
+                            {
+                                "fragment_id": frag_id,
+                                "page_number": page_idx + 1,
+                                "order": row_idx + 1,
+                                "raw_text": line,
+                                "coordinates": coords,
+                                "status": "RECHAZADO",
+                                "explanation": "Fechas inválidas",
+                            }
+                        )
+                else:
                     uninterpreted_lines.append(line)
+                    page_fragment_records.append(
+                        {
+                            "fragment_id": frag_id,
+                            "page_number": page_idx + 1,
+                            "order": row_idx + 1,
+                            "raw_text": line,
+                            "coordinates": coords,
+                            "status": "NO_COTIZACION",
+                            "explanation": "No contiene estructura de cotización",
+                        }
+                    )
 
+            # Preserve uninterpreted lines without silent truncation (Issue A)
             audit.pages_audit.append(
                 PageExtractionAudit(
                     page_number=page_idx + 1,
                     method=method,
                     text_length=len(page_text),
                     fragments_detected=page_fragments,
-                    uninterpreted_lines=uninterpreted_lines[:10],
+                    raw_page_text=page_text,
+                    fragments=page_fragment_records,
+                    uninterpreted_lines=uninterpreted_lines,
                 )
             )
 
