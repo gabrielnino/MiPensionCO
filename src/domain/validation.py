@@ -277,6 +277,12 @@ def reconcile_labor_history(historia: HistoriaLaboral) -> dict[str, Any]:
     validation_issues = validate_labor_history_periods(historia.registros)
     blocking_errors = [i for i in validation_issues if i["severity"] == "ERROR"]
 
+    if not reviewed_detail:
+        blocking_errors.append(
+            {
+                "message": "No hay detalle documental activo para conciliar las semanas. Revise la extracción del PDF."
+            }
+        )
     if tiene_discrepancia:
         blocking_errors.append({"message": asuntos_pendientes[0]})
     if declared_overlap:

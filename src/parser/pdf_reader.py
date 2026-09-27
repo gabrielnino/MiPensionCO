@@ -6,6 +6,7 @@ Adheres strictly to Colombian formatting (DD/MM/YYYY, COP currency).
 Integrates with AuditService for step-by-step extraction audit.
 """
 
+import calendar
 import hashlib
 import re
 import uuid
@@ -170,6 +171,116 @@ class ColpensionesPDFReader:
             return Decimal(0)
 
     @classmethod
+    def extract_cell_tables(
+        cls, page: Any, page_number: int
+    ) -> tuple[
+        list[CotizacionRecord], list[ResumenEmpleadorRecord], list[dict[str, Any]]
+    ]:
+        """Read numbered official columns without confusing payment dates with periods.
+
+        Period YYYYMM supplies month boundaries, not exact days of partial coverage.
+        Reported and credited days remain separate documentary values.
+        """
+        records: list[CotizacionRecord] = []
+        summaries: list[ResumenEmpleadorRecord] = []
+        fragments: list[dict[str, Any]] = []
+        for table_index, table in enumerate(page.find_tables().tables):
+            rows = table.extract()
+            if not rows:
+                continue
+            columns = {}
+            for index, cell in enumerate(rows[0]):
+                match = re.search(r"\[(\d+)\]", cell or "")
+                if match:
+                    columns[int(match.group(1))] = index
+            is_detail = all(n in columns for n in range(34, 47))
+            is_summary = all(n in columns for n in range(1, 10))
+            if not (is_detail or is_summary):
+                continue
+            for row_index, row in enumerate(rows[1:], 1):
+                values = {
+                    n: (row[i] or "").replace("\n", " ").strip()
+                    for n, i in columns.items()
+                }
+                fragment_id = f"p{page_number}_t{table_index + 1}_r{row_index}"
+                raw = " | ".join(cell or "" for cell in row)
+                fragment: dict[str, Any] = {
+                    "fragment_id": fragment_id,
+                    "page_number": page_number,
+                    "order": row_index,
+                    "raw_text": raw,
+                    "coordinates": list(table.rows[row_index].bbox),
+                    "status": "INTERPRETADO",
+                    "explanation": "Fila de tabla por columnas numeradas",
+                }
+                if is_detail:
+                    period = values[37]
+                    if not re.fullmatch(r"\d{6}", period):
+                        continue
+                    year, month = int(period[:4]), int(period[4:])
+                    if not 1 <= month <= 12 or year < 1900:
+                        fragment.update(
+                            status="RECHAZADO", explanation="Período mensual inválido"
+                        )
+                        fragments.append(fragment)
+                        continue
+                    has_days = values[44].isdigit() and values[45].isdigit()
+                    has_ibc = bool(re.fullmatch(r"\$?\s*\d[\d.,]*", values[40]))
+                    pending = not has_days or not has_ibc
+                    records.append(
+                        CotizacionRecord(
+                            periodo_inicio=date(year, month, 1),
+                            periodo_fin=date(
+                                year, month, calendar.monthrange(year, month)[1]
+                            ),
+                            dias_reportados=int(values[44])
+                            if values[44].isdigit()
+                            else 0,
+                            dias_cotizados=int(values[45])
+                            if values[45].isdigit()
+                            else 0,
+                            ibc=cls.parse_colombian_decimal(values[40]),
+                            aportante=values[35],
+                            nit=values[34],
+                            novedad=values[43],
+                            observaciones=values[46]
+                            + (" DATO_AUSENTE" if pending else ""),
+                            fecha_pago=cls.parse_colombian_date(values[38]),
+                            pagina=page_number,
+                            fila=row_index,
+                            dias_pendientes_validacion=pending,
+                            source_fragment_ids=(fragment_id,),
+                        )
+                    )
+                    if pending:
+                        fragment.update(
+                            status="AMBIGUO", explanation="Faltan días o IBC en la fila"
+                        )
+                else:
+                    start = cls.parse_colombian_date(values[3])
+                    end = cls.parse_colombian_date(values[4])
+                    if start is None or end is None:
+                        continue
+                    summaries.append(
+                        ResumenEmpleadorRecord(
+                            nit=values[1],
+                            nombre_aportante=values[2],
+                            periodo_inicio=start,
+                            periodo_fin=end,
+                            ultimo_salario=cls.parse_colombian_decimal(values[5]),
+                            semanas=cls.parse_colombian_decimal(values[6]),
+                            licencias=cls.parse_colombian_decimal(values[7]),
+                            simultaneidad=cls.parse_colombian_decimal(values[8]),
+                            total_semanas=cls.parse_colombian_decimal(values[9]),
+                            pagina=page_number,
+                            fila=row_index,
+                            source_fragment_ids=(fragment_id,),
+                        )
+                    )
+                fragments.append(fragment)
+        return records, summaries, fragments
+
+    @classmethod
     def extract_from_bytes(
         cls,
         pdf_bytes: bytes,
@@ -275,7 +386,11 @@ class ColpensionesPDFReader:
 
             if page_text:
                 total_non_empty_pages += 1
-                total_text += page_text + "\n"
+                total_text += (
+                    page.get_text("text", sort=True)
+                    if method == "TEXTO_DIRECTO"
+                    else page_text
+                ) + "\n"
 
             # Extract blocks with coordinates for full spatial traceability
             blocks = page.get_text("blocks")
@@ -296,7 +411,12 @@ class ColpensionesPDFReader:
             ]
             uninterpreted_lines: list[str] = []
             page_fragments = len(lines)
-            page_fragment_records: list[dict[str, Any]] = []
+            table_records, table_summaries, table_fragments = cls.extract_cell_tables(
+                page, page_idx + 1
+            )
+            records.extend(table_records)
+            resumen_records.extend(table_summaries)
+            page_fragment_records: list[dict[str, Any]] = list(table_fragments)
 
             for row_idx, line in enumerate(lines):
                 frag_id = f"p{page_idx + 1}_f{row_idx + 1}"
@@ -357,7 +477,7 @@ class ColpensionesPDFReader:
 
                 # Search for start and end dates
                 date_matches = list(cls.DATE_PATTERN.finditer(line))
-                if len(date_matches) >= 2:
+                if len(date_matches) >= 2 and not (table_records or table_summaries):
                     m1, m2 = date_matches[0], date_matches[1]
                     p_start = cls.parse_colombian_date(m1.group(0))
                     p_end = cls.parse_colombian_date(m2.group(0))
@@ -926,7 +1046,7 @@ class ColpensionesPDFReader:
         if historia.resumen_empleadores and not historia.registros:
             report.warnings.append(
                 f"Se detectó la tabla 'RESUMEN DE SEMANAS COTIZADAS POR EMPLEADOR' con {len(historia.resumen_empleadores)} períodos "
-                f"({historia.semanas_resumen_colpensiones} semanas reconocidas). El documento no contiene la tabla de detalle mensual de cotizaciones "
+                f"({historia.semanas_resumen_colpensiones} semanas reconocidas). No se pudo extraer la tabla de detalle mensual de cotizaciones "
                 "(IBC histórico); para proyectar la mesada pensional se requerirá ingresar el IBC estimado o cargar un reporte detallado."
             )
 

@@ -1879,6 +1879,9 @@
           body: JSON.stringify(laborHistory)
         });
         const recData = await resp.json();
+        if (!resp.ok || typeof recData.permite_continuar !== 'boolean' || !recData.conteo_registros) {
+          throw new Error('No se pudo verificar la conciliación. Revise el servidor y vuelva a intentarlo.');
+        }
 
         const semPdf = recData.semanas_reconocidas_pdf !== undefined ? recData.semanas_reconocidas_pdf : (recData.semanas_resumen_pdf || laborHistory.semanas_resumen_colpensiones || 0);
         document.getElementById('recon-kpi-pdf').textContent = Number(semPdf).toFixed(2);
@@ -1894,12 +1897,13 @@
           let html = '';
           const diff = Math.abs(recData.diferencia_detalle_vs_reconocidas !== undefined ? recData.diferencia_detalle_vs_reconocidas : (recData.diferencia_resumen_vs_detalle || 0));
 
-          if (recData.discrepancias_detectadas && recData.discrepancias_detectadas.length > 0) {
+          const discrepancies = recData.errores_bloqueantes || [];
+          if (discrepancies.length > 0) {
             html += `
               <div class="alert alert-warning" style="margin-bottom: 0.75rem;">
                 <strong>⚠️ Discrepancias y Asuntos Pendientes Identificados:</strong>
                 <ul style="margin-top: 4px; padding-left: 1.25rem;">
-                  ${recData.discrepancias_detectadas.map(d => `<li>${escapeHTML(d)}</li>`).join('')}
+                  ${discrepancies.map(d => `<li>${escapeHTML(d)}</li>`).join('')}
                 </ul>
                 <div style="font-size: 0.8rem; margin-top: 6px; color: #92400e;">
                   <strong>Regla de Consistencia:</strong> El motor no resuelve discrepancias eligiendo automáticamente el valor mayor.
@@ -1938,6 +1942,8 @@
 
       } catch (err) {
         console.warn("Error en conciliación:", err);
+        document.getElementById('recon-discrepancia-banner').innerHTML =
+          '<div class="alert alert-warning">No se pudo verificar la conciliación. No hay un resultado válido; revise el servidor y vuelva a intentarlo.</div>';
       }
     }
 

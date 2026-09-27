@@ -162,7 +162,23 @@ def test_review_periods_screen_full_e2e(review_server_url: str) -> None:
 
         # Verify reconciliation banner explains discrepancy and does NOT arbitrarily pick the higher
         recon_banner = page.inner_text("#recon-discrepancia-banner")
-        assert len(recon_banner) > 0
+        assert "Discrepancias" in recon_banner
+        assert "Conciliación Consistente" not in recon_banner
+        page.route(
+            "**/api/review/reconcile",
+            lambda route: route.fulfill(
+                status=422,
+                content_type="application/json",
+                body='{"detail": "invalid"}',
+            ),
+        )
+        page.evaluate("updateReconciliationView()")
+        assert "No se pudo verificar" in page.inner_text("#recon-discrepancia-banner")
+        assert "Conciliación Consistente" not in page.inner_text(
+            "#recon-discrepancia-banner"
+        )
+        page.unroute("**/api/review/reconcile")
+        page.evaluate("updateReconciliationView()")
 
         # 3.2 Verify Table 1: Employer Summary separation and actuarial banner
         assert page.is_visible("#section-resumen-empleador")

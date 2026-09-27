@@ -94,3 +94,19 @@ Una discrepancia de al menos una semana, o menor si cruza el umbral de transici�
 La evaluación de transición omite los registros excluidos. Si existen exclusiones, el resumen permanece intacto como evidencia original, pero no puede reincorporar silenciosamente los períodos retirados: el cumplimiento debe sostenerse con los registros activos. Si estos no bastan, se informa insuficiencia documental.
 
 Pruebas: `tests/test_review_consistency.py`; Chromium cubre tanto el bloqueo de un reporte incompleto como el avance de una historia sintética completa.
+
+
+### Extracción de tablas oficiales por celdas
+
+El lector reconoce las columnas numeradas del resumen [1]-[9] y del detalle
+[34]-[46], incluso con texto multilínea. El período AAAAMM determina el mes;
+la fecha de pago se conserva separadamente. Días reportados, días cotizados e IBC
+se leen de sus propias columnas. Cada fila conserva página, coordenadas y texto
+original en la auditoría. No se usa el último salario del resumen como IBC histórico.
+
+La ausencia de detalle activo bloquea la conciliación. Una respuesta HTTP fallida
+o incompleta tampoco puede producir el aviso de conciliación consistente.
+El recálculo calendario puede diferir del resumen certificado: esa diferencia se
+muestra y requiere revisión, sin modificar el certificado ni inventar fechas exactas
+para días parciales dentro de un mes. Esta corrección del lector no cambia las
+reglas de cómputo del motor.
