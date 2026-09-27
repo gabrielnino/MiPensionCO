@@ -13,6 +13,7 @@ Strictly follows statutory provisions:
 """
 
 import calendar
+from dataclasses import replace
 from datetime import date, timedelta
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import Any
@@ -451,6 +452,7 @@ class PensionEngine:
         records: list[CotizacionRecord] | None = None,
         horizon_date: date | None = None,
         return_details: bool = False,
+        projector: EconomicProjector | None = None,
     ) -> Any:
         """Calculates IBL comparing 10-year effective cotizaciones vs lifetime average.
 
@@ -469,7 +471,9 @@ class PensionEngine:
 
         # Consolidate records by month
         monthly_contributions = self.consolidate_monthly_contributions(
-            active_records, horizon_date=horizon_date, projector=self.projector
+            active_records,
+            horizon_date=horizon_date,
+            projector=projector or self.projector,
         )
         if not monthly_contributions:
             return (
@@ -654,6 +658,51 @@ class PensionEngine:
 
         return salud_pct, salud_monto, fsp_pct, fsp_monto, valor_despues
 
+    @staticmethod
+    def additional_declared_weeks(
+        documentary_records: list[CotizacionRecord],
+        declared_records: list[CotizacionRecord],
+    ) -> tuple[Decimal, bool]:
+        """Count new declared coverage without certifying overlapping contributions.
+
+        SL138-2024: simultaneous employers cannot create additional calendar days.
+        An overlap may be a correction or a separate employer: until reviewed it
+        must not inflate either weeks or IBL. Partial coverage has no known dates;
+        overlapping partial records therefore remain pending rather than being
+        assigned invented coverage dates.
+        """
+        occupied_days: set[date] = set()
+        for record in documentary_records:
+            occupied_days.update(
+                record.periodo_inicio + timedelta(days=offset)
+                for offset in range(
+                    max(0, (record.periodo_fin - record.periodo_inicio).days + 1)
+                )
+            )
+        additional_days = 0
+        has_overlap = False
+        # Stable ordering makes ambiguous partial coverage independent of input order.
+        for record in sorted(
+            declared_records, key=lambda item: (item.periodo_inicio, item.periodo_fin)
+        ):
+            interval_days = {
+                record.periodo_inicio + timedelta(days=offset)
+                for offset in range(
+                    max(0, (record.periodo_fin - record.periodo_inicio).days + 1)
+                )
+            }
+            overlaps = bool(interval_days & occupied_days)
+            has_overlap = has_overlap or overlaps
+            if record.dias_cotizados >= len(interval_days):
+                additional_days += len(interval_days - occupied_days)
+            elif not overlaps:
+                additional_days += max(0, record.dias_cotizados)
+            occupied_days.update(interval_days)
+        weeks = (Decimal(additional_days) / Decimal(7)).quantize(
+            Decimal("0.01"), rounding=ROUND_FLOOR
+        )
+        return weeks, has_overlap
+
     def simulate_scenario(
         self,
         historia: HistoriaLaboral,
@@ -669,6 +718,14 @@ class PensionEngine:
         - Finding 2.8: Strictly excludes post-horizon contributions from pension determination.
         """
         today = as_of_date or date(2026, 9, 27)
+        # Each scenario owns its economic assumptions; never mutate the shared engine.
+        scenario_projector = EconomicProjector(
+            replace(
+                self.projector.assumptions,
+                assumed_annual_inflation=escenario.supuesto_inflacion,
+                assumed_annual_smlmv_growth=escenario.supuesto_crecimiento_smlmv,
+            )
+        )
 
         if historia.fecha_nacimiento is None or historia.sexo is None:
             raise ValueError(
@@ -705,7 +762,9 @@ class PensionEngine:
             if historia.semanas_resumen_colpensiones > Decimal(0)
             else self.compute_calendar_weeks(doc_records)
         )
-        semanas_declaradas = self.compute_calendar_weeks(decl_records)
+        semanas_declaradas, has_declared_overlap = self.additional_declared_weeks(
+            doc_records, decl_records
+        )
         semanas_cal = self.compute_calendar_weeks(historia.registros)
         diferencia_cal = (semanas_cal - (semanas_doc + semanas_declaradas)).quantize(
             Decimal("0.01")
@@ -809,7 +868,7 @@ class PensionEngine:
                         ).quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
                         # Bound between 1 and 25 SMLMV
-                        smlmv_proj = self.projector.get_projected_smlmv(cur_y)
+                        smlmv_proj = scenario_projector.get_projected_smlmv(cur_y)
                         annual_ibc = max(
                             smlmv_proj,
                             min(smlmv_proj * Decimal(25), annual_ibc),
@@ -884,6 +943,7 @@ class PensionEngine:
             cumple_semanas
             and not requiere_revision_discrepancia
             and not historia.periodos_desconocidos_o_faltantes
+            and not has_declared_overlap
         )
 
         deficit = max(Decimal(0), Decimal(required_weeks) - semanas_totales).quantize(
@@ -893,7 +953,7 @@ class PensionEngine:
             Decimal("0.01")
         )
 
-        smlmv_ref = self.projector.get_projected_smlmv(horizon_date.year)
+        smlmv_ref = scenario_projector.get_projected_smlmv(horizon_date.year)
 
         # Step breakdown narrative
         desglose: list[str] = [
@@ -934,7 +994,16 @@ class PensionEngine:
 
         # If not enabled for liquidation (deficit, discrepancy, or unknown periods):
         if not es_liquidable:
-            if requiere_revision_discrepancia:
+            if has_declared_overlap:
+                advertencia = (
+                    "Superposición de períodos declarados con registros existentes. "
+                    "Solo se añaden días nuevos identificables; revise si se trata de "
+                    "una corrección o de otro empleador antes de liquidar el IBL."
+                )
+                desglose.append(advertencia)
+                blocking_code = "SUPERPOSICION_DECLARADA_PENDIENTE"
+                blocking_limit = "BLOQUEADO_POR_SUPERPOSICION"
+            elif requiere_revision_discrepancia:
                 advertencia = (
                     f"DISCREPANCIA DOCUMENTAL: El resumen de semanas ({semanas_doc}) difiere del recálculo de períodos ({semanas_cal}) "
                     f"con información salarial insuficiente para liquidar. "
@@ -974,6 +1043,7 @@ class PensionEngine:
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
+                            "declaradas_adicionales": str(semanas_declaradas),
                             "declaradas": str(semanas_declaradas),
                             "calendario": str(semanas_cal),
                             "proyectadas": str(semanas_proyectadas),
@@ -1087,6 +1157,7 @@ class PensionEngine:
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
+                            "declaradas_adicionales": str(semanas_declaradas),
                             "calendario": str(semanas_cal),
                             "proyectadas": str(semanas_proyectadas),
                             "totales": str(semanas_totales),
@@ -1183,6 +1254,7 @@ class PensionEngine:
                 records=all_simulation_records,
                 horizon_date=horizon_date,
                 return_details=True,
+                projector=scenario_projector,
             )
         except IPCFaltanteError as exc:
             advertencia = (
@@ -1201,6 +1273,7 @@ class PensionEngine:
                         generated_future_periods_count=len(projected_future_records),
                         weeks_breakdown={
                             "documentales": str(semanas_doc),
+                            "declaradas_adicionales": str(semanas_declaradas),
                             "calendario": str(semanas_cal),
                             "proyectadas": str(semanas_proyectadas),
                             "totales": str(semanas_totales),
@@ -1341,7 +1414,7 @@ class PensionEngine:
         )
 
         # Real valuation
-        val = self.projector.convert_valuation(
+        val = scenario_projector.convert_valuation(
             valor_despues, horizon_date.year, horizon_date.month
         )
 
@@ -1359,6 +1432,7 @@ class PensionEngine:
                     generated_future_periods_count=len(projected_future_records),
                     weeks_breakdown={
                         "documentales": str(semanas_doc),
+                        "declaradas_adicionales": str(semanas_declaradas),
                         "calendario": str(semanas_cal),
                         "proyectadas": str(semanas_proyectadas),
                         "totales": str(semanas_totales),

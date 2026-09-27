@@ -74,3 +74,12 @@ flowchart TD
 | **Tope de Tasa** | CSJ SL810-2023 / Ley 797 Art. 10 | Las semanas sobre 1.800 incrementan la tasa en 1.5% por cada 50 semanas hasta el tope absoluto del **80.00%**. |
 | **Aporte a Salud** | Ley 2010 de 2019 / Ley 2294 de 2023 | 4% para mesadas de 1 SMLMV; 10% para >1 hasta 3 SMLMV; 12% para >3 SMLMV. |
 | **Fondo Solidaridad (FSP)** | Ley 100 de 1993, Art. 27 / D. 1833 de 2016 | 0% hasta 10 SMLMV; 1% para >10 hasta 20 SMLMV; 2% para >20 SMLMV. |
+
+
+## Corrección de escenarios y superposiciones (27 de septiembre de 2026)
+
+Cada simulación crea un proyector económico independiente con la inflación y el crecimiento del salario mínimo de su escenario, preservando la fecha base configurada. Se utiliza en los límites del IBC futuro, la consolidación para IBL, el salario mínimo de referencia y la conversión a pesos reales. Reutilizar el motor no mezcla supuestos entre escenarios.
+
+Las declaraciones solo añaden días que no están cubiertos por los intervalos documentales ni por otras declaraciones. Las superposiciones quedan pendientes de revisión y bloquean la mesada y sus descuentos: podrían representar una corrección o un empleador simultáneo y no deben duplicar salarios en el IBL. Se conserva la evidencia original. Si una declaración parcial se superpone, no se le asignan fechas exactas inventadas ni semanas adicionales hasta aclarar su cobertura. El desglose de auditoría incluye `declaradas_adicionales`.
+
+Pruebas de regresión: `tests/test_scenario_economics_and_overlap.py`. Incluyen crecimiento cero y 20 %, reutilización del motor, inflación para pesos reales, superposiciones totales/parciales y bloqueo aun cuando se reúnen las semanas mínimas.
