@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiPensiónCO 🇨🇴 - Simulador Pensional de Vejez (Ley 100 / Transición)</title>
+  <style>
+    :root {
+      --primary: #0d47a1;
+      --primary-dark: #002171;
+      --primary-light: #e8eaf6;
+      --secondary: #00897b;
+      --accent: #f57f17;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --success: #15803d;
+      --success-bg: #f0fdf4;
+      --warning: #b45309;
+      --warning-bg: #fffbeb;
+      --info-bg: #eff6ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 1.25rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand h1 { font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .brand p { font-size: 0.85rem; opacity: 0.9; }
+
+    .header-actions { display: flex; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .btn-light { background: white; color: var(--primary); }
+    .btn-light:hover { background: #f1f5f9; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--secondary); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-outline { background: transparent; border-color: var(--border); color: var(--text); }
+    .btn-outline:hover { background: #e2e8f0; }
+
+    .container {
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    /* Stepper navigation */
+    .stepper {
+      display: flex;
+      justify-content: space-between;
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+    }
+    .step-item.active {
+      color: var(--primary);
+      background: var(--primary-light);
+    }
+    .step-item.completed {
+      color: var(--success);
+    }
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+    }
+    .step-item.active .step-num { background: var(--primary); color: white; }
+    .step-item.completed .step-num { background: var(--success); color: white; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Banners & alerts */
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+      border-left: 4px solid transparent;
+    }
+    .alert-info { background: var(--info-bg); border-color: var(--primary); color: #1e3a8a; }
+    .alert-warning { background: var(--warning-bg); border-color: var(--accent); color: var(--warning); }
+    .alert-danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+    .alert-success { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+
+    /* Upload zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 3rem 2rem;
+      text-align: center;
+      background: #fdfdfd;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+    .dropzone svg {
+      width: 48px;
+      height: 48px;
+      fill: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    /* Forms */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .form-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .form-control {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(13,71,161,0.2);
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    /* Results layout */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi-card {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .kpi-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin: 4px 0;
+    }
+    .kpi-lbl {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge-success { background: var(--success-bg); color: var(--success); }
+    .badge-danger { background: var(--danger-bg); color: var(--danger); }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal.active { display: flex; }
+    .modal-box {
+      background: white;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+
+    /* Accordion / Desglose */
+    details {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+    }
+    summary {
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--primary);
+    }
+    details ul {
+      margin-top: 0.5rem;
+      padding-left: 1.25rem;
+      font-size: 0.85rem;
+    }
+
+    .nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1.5rem;
+    }
+
+    /* Print styles */
+    @media print {
+      body { background: white; padding: 0; }
+      header, .stepper, .nav-buttons, .btn { display: none !important; }
+      .container { max-width: 100%; margin: 0; padding: 0; }
+      .card { border: none; box-shadow: none; padding: 0; margin-bottom: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>🇨🇴 MiPensiónCO</h1>
+      <p>Simulador Oficial Local de Pensión de Vejez — Régimen de Transición (Ley 100 de 1993)</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-light" onclick="openCatalogModal()">📜 Catálogo Jurídico</button>
+      <button class="btn btn-outline" style="color:white; border-color:rgba(255,255,255,0.4);" onclick="resetSession()">🗑️ Borrar Sesión</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <div class="alert alert-info">
+      <strong>Aviso Legal Importante:</strong> Estimación puramente informativa basada en los datos documentales y supuestos económicos ingresados. El reconocimiento y liquidación pensional corresponden exclusivamente a Colpensiones.
+    </div>
+
+    <!-- Stepper -->
+    <div class="stepper">
+      <div class="step-item active" id="step-nav-1" onclick="goToStep(1)">
+        <span class="step-num">1</span> <span>1. Cargar Historia</span>
+      </div>
+      <div class="step-item" id="step-nav-2" onclick="goToStep(2)">
+        <span class="step-num">2</span> <span>2. Revisar Datos</span>
+      </div>
+      <div class="step-item" id="step-nav-3" onclick="goToStep(3)">
+        <span class="step-num">3</span> <span>3. Evaluación Transición</span>
+      </div>
+      <div class="step-item" id="step-nav-4" onclick="goToStep(4)">
+        <span class="step-num">4</span> <span>4. Configurar Escenarios</span>
+      </div>
+      <div class="step-item" id="step-nav-5" onclick="goToStep(5)">
+        <span class="step-num">5</span> <span>5. Resultados y Comparativa</span>
+      </div>
+    </div>
+
+    <!-- STEP 1: CARGA DE HISTORIA LABORAL -->
+    <div class="step-panel" id="step-panel-1">
+      <div class="card">
+        <div class="card-title">Cargar Historia Laboral de Colpensiones</div>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+          Cargue su archivo PDF oficial emitido por Colpensiones. El documento se procesa <strong>100% de manera local en su equipo</strong>, sin transmitir sus datos personales a internet ni a terceros.
+        </p>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+          <p><strong>Haga clic aquí o arrastre su archivo PDF de Colpensiones</strong></p>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Soporta reportes encriptados con contraseña y texto digitalizado.</span>
+          <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+        </div>
+
+        <div id="upload-status" style="margin-top: 1rem; display:none;"></div>
+      </div>
+    </div>
+
+    <!-- STEP 2: REVISIÓN DE DATOS -->
+    <div class="step-panel" id="step-panel-2" style="display:none;">
+      <div class="card">
+        <div class="card-title">Revisar Información y Completar Faltantes</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Verifique los datos extraídos de su reporte. Por mandato jurídico, la categoría de edad para requisitos pensionales no se deduce del nombre: debe ser verificada directamente.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha de Nacimiento:</label>
+            <input type="date" class="form-control" id="rev-fecha-nac">
+          </div>
+          <div class="form-group">
+            <label>Categoría para Requisitos Pensionales:</label>
+            <select class="form-control" id="rev-sexo">
+              <option value="">Seleccione una opción...</option>
+              <option value="FEMENINO">Mujer (57 años de edad legal)</option>
+              <option value="MASCULINO">Hombre (62 años de edad legal)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Semanas Reconocidas en Resumen:</label>
+            <input type="number" step="0.01" class="form-control" id="rev-semanas-resumen">
+          </div>
+          <div class="form-group">
+            <label>Fecha de Corte/Actualización del Reporte:</label>
+            <input type="date" class="form-control" id="rev-fecha-corte">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Semanas de Alto Riesgo (Dec. 2090/2003):</label>
+            <input type="number" step="0.01" class="form-control" id="rev-alto-riesgo" value="0">
+          </div>
+          <div class="form-group">
+            <label>¿Existen períodos faltantes o no certificados?:</label>
+            <select class="form-control" id="rev-faltantes">
+              <option value="false">No, la información está completa</option>
+              <option value="true">Sí, existen vacíos o aportes pendientes de acreditar</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card-title" style="margin-top: 1.5rem; font-size: 1rem;">Detalle de Períodos de Cotización Detectados</div>
+        <div class="table-container">
+          <table id="table-registros">
+            <thead>
+              <tr>
+                <th>Inicio</th>
+                <th>Fin</th>
+                <th>Días</th>
+                <th>IBC Reportado</th>
+                <th>Aportante</th>
+                <th>Procedencia</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(1)">← Volver a Carga</button>
+          <button class="btn btn-primary" onclick="confirmReviewAndEvaluate()">Continuar a Evaluación de Transición →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: EVALUACIÓN DE TRANSICIÓN -->
+    <div class="step-panel" id="step-panel-3" style="display:none;">
+      <div class="card">
+        <div class="card-title">Evaluación del Régimen de Transición (Ley 2381 / C-264 de 2026)</div>
+
+        <div id="transition-result-banner"></div>
+
+        <div class="kpi-grid" style="margin-top: 1rem;">
+          <div class="kpi-card">
+            <div class="kpi-lbl">Umbral Legal Exigido</div>
+            <div class="kpi-val" id="trans-kpi-umbral">-</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Semanas requeridas al corte</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Acreditadas</div>
+            <div class="kpi-val" id="trans-kpi-acreditadas">-</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Antes de la fecha de corte</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Fecha de Corte Aplicable</div>
+            <div class="kpi-val" id="trans-kpi-corte" style="font-size: 1.1rem; color: var(--text);">-</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Sentencia C-264 de 2026</div>
+          </div>
+        </div>
+
+        <div class="alert alert-info" id="trans-legal-notes"></div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(2)">← Corregir Datos</button>
+          <button class="btn btn-primary" id="btn-to-step-4" onclick="goToStep(4)">Configurar Escenarios de Proyección →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: ESCENARIOS -->
+    <div class="step-panel" id="step-panel-4" style="display:none;">
+      <div class="card">
+        <div class="card-title">Configuración de Escenarios de Proyección</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Defina los supuestos de ingresos para el tiempo restante hasta la edad legal ordinaria. Todos los escenarios terminan obligatoriamente al alcanzar la edad legal de retiro.
+        </p>
+
+        <div id="escenarios-container">
+          <!-- Escenario 1 -->
+          <div class="card" style="background: #f8fafc; border: 1px solid var(--border);">
+            <div class="card-title" style="font-size: 1rem;">Escenario 1: Proyección Base</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>IBC Futuro Inicial (COP):</label>
+                <input type="number" class="form-control" id="esc1-ibc" value="3000000" step="50000">
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Entre 1 SMLMV y 25 SMLMV</span>
+              </div>
+              <div class="form-group">
+                <label>Crecimiento Anual Nominal (%):</label>
+                <input type="number" class="form-control" id="esc1-crecimiento" value="5.0" step="0.1">
+              </div>
+              <div class="form-group">
+                <label>Supuesto de Inflación Anual (%):</label>
+                <input type="number" class="form-control" id="esc1-inflacion" value="4.0" step="0.1">
+              </div>
+              <div class="form-group">
+                <label>Supuesto Aumento Salario Mínimo (%):</label>
+                <input type="number" class="form-control" id="esc1-smlmv" value="5.5" step="0.1">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(3)">← Volver a Transición</button>
+          <button class="btn btn-primary" onclick="runSimulation()">Ejecutar Simulación y Ver Resultados →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5: RESULTADOS Y COMPARATIVA -->
+    <div class="step-panel" id="step-panel-5" style="display:none;">
+      <div id="simulation-output"></div>
+
+      <div class="nav-buttons" style="margin-top: 2rem;">
+        <button class="btn btn-outline" onclick="goToStep(4)">← Modificar Escenarios</button>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" onclick="exportResultsJSON()">💾 Exportar JSON</button>
+          <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL: Password Input -->
+  <div class="modal" id="pwd-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🔒 Archivo Protegido con Contraseña</h3>
+        <button class="modal-close" onclick="closePwdModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Este PDF requiere contraseña para abrirse. Ingrésela localmente; nunca será guardada en logs ni transmitida fuera de su equipo.
+      </p>
+      <div class="form-group">
+        <label>Contraseña del PDF:</label>
+        <input type="password" id="pdf-password-input" class="form-control" placeholder="Ingrese la contraseña">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+        <button class="btn btn-outline" onclick="closePwdModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitPassword()">Desbloquear Documento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Legal Catalog -->
+  <div class="modal" id="catalog-modal">
+    <div class="modal-box" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3>📜 Catálogo de Reglas Jurídicas y Jurisprudencia</h3>
+        <button class="modal-close" onclick="closeCatalogModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Normas legales, sentencias de la Corte Constitucional y la Corte Suprema de Justicia aplicadas con fecha de corte de auditoría al <strong>27 de septiembre de 2026</strong>.
+      </p>
+      <div id="catalog-content">Cargando catálogo...</div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let currentStep = 1;
+    let laborHistory = null;
+    let lastUploadedFile = null;
+    let simulationResults = [];
+
+    // Stepper navigation
+    function goToStep(step) {
+      if (step > 2 && !laborHistory) {
+        alert("Por favor cargue primero un archivo de historia laboral.");
+        return;
+      }
+      currentStep = step;
+      document.querySelectorAll('.step-panel').forEach(p => p.style.display = 'none');
+      document.getElementById(`step-panel-${step}`).style.display = 'block';
+
+      for (let i = 1; i <= 5; i++) {
+        const item = document.getElementById(`step-nav-${i}`);
+        item.classList.remove('active', 'completed');
+        if (i < step) item.classList.add('completed');
+        if (i === step) item.classList.add('active');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Drag and drop handlers
+    const dropzone = document.getElementById('dropzone');
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('dragover'); });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        processUploadedFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleFileSelect(e) {
+      if (e.target.files.length > 0) {
+        processUploadedFile(e.target.files[0]);
+      }
+    }
+
+    async function processUploadedFile(file, password = null) {
+      lastUploadedFile = file;
+      const statusDiv = document.getElementById('upload-status');
+      statusDiv.style.display = 'block';
+      statusDiv.innerHTML = '<div class="alert alert-info">Procesando historia laboral de manera local...</div>';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      if (password) formData.append('password', password);
+
+      try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const res = await resp.json();
+
+        if (resp.status === 401 && res.requires_password) {
+          statusDiv.innerHTML = '<div class="alert alert-warning">El documento está protegido con contraseña.</div>';
+          document.getElementById('pwd-modal').classList.add('active');
+          return;
+        }
+
+        if (!resp.ok || !res.success) {
+          statusDiv.innerHTML = `<div class="alert alert-danger">${res.error_message || "Error al procesar el archivo."}</div>`;
+          return;
+        }
+
+        laborHistory = res.data;
+        statusDiv.innerHTML = `<div class="alert alert-success">Documento procesado con éxito. Se identificaron ${res.report.records_extracted} registros de cotización.</div>`;
+
+        populateReviewScreen(laborHistory);
+        setTimeout(() => goToStep(2), 500);
+
+      } catch (err) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Error local de conexión: ${err.message}</div>`;
+      }
+    }
+
+    function submitPassword() {
+      const pwd = document.getElementById('pdf-password-input').value;
+      if (!pwd) return;
+      closePwdModal();
+      if (lastUploadedFile) {
+        processUploadedFile(lastUploadedFile, pwd);
+      }
+    }
+
+    function closePwdModal() {
+      document.getElementById('pwd-modal').classList.remove('active');
+      document.getElementById('pdf-password-input').value = '';
+    }
+
+    function populateReviewScreen(h) {
+      document.getElementById('rev-fecha-nac').value = h.fecha_nacimiento || '';
+      document.getElementById('rev-sexo').value = h.sexo || '';
+      document.getElementById('rev-semanas-resumen').value = h.semanas_resumen_colpensiones || 0;
+      document.getElementById('rev-fecha-corte').value = h.fecha_actualizacion_reporte || '';
+      document.getElementById('rev-alto-riesgo').value = h.semanas_alto_riesgo || 0;
+      document.getElementById('rev-faltantes').value = h.periodos_desconocidos_o_faltantes ? "true" : "false";
+
+      const tbody = document.querySelector('#table-registros tbody');
+      tbody.innerHTML = '';
+      h.registros.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.periodo_inicio}</td>
+          <td>${r.periodo_fin}</td>
+          <td>${r.dias_cotizados}</td>
+          <td>$${Number(r.ibc).toLocaleString('es-CO')}</td>
+          <td>${r.aportante}</td>
+          <td><span class="badge badge-success">${r.origen}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function confirmReviewAndEvaluate() {
+      const fNac = document.getElementById('rev-fecha-nac').value;
+      const sexo = document.getElementById('rev-sexo').value;
+      if (!fNac || !sexo) {
+        alert("La fecha de nacimiento y la categoría pensional (sexo) son obligatorias para el cálculo jurídico.");
+        return;
+      }
+
+      laborHistory.fecha_nacimiento = fNac;
+      laborHistory.sexo = sexo;
+      laborHistory.semanas_resumen_colpensiones = parseFloat(document.getElementById('rev-semanas-resumen').value) || 0;
+      laborHistory.fecha_actualizacion_reporte = document.getElementById('rev-fecha-corte').value || null;
+      laborHistory.semanas_alto_riesgo = parseFloat(document.getElementById('rev-alto-riesgo').value) || 0;
+      laborHistory.periodos_desconocidos_o_faltantes = document.getElementById('rev-faltantes').value === "true";
+
+      // Call transition evaluation API
+      try {
+        const resp = await fetch('/api/evaluate-transition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(laborHistory)
+        });
+        const evalRes = await resp.json();
+        renderTransitionResult(evalRes);
+        goToStep(3);
+      } catch (err) {
+        alert("Error al evaluar transición: " + err.message);
+      }
+    }
+
+    function renderTransitionResult(ev) {
+      const banner = document.getElementById('transition-result-banner');
+      const btnStep4 = document.getElementById('btn-to-step-4');
+
+      document.getElementById('trans-kpi-umbral').innerText = `${ev.umbral_exigido} sem`;
+      document.getElementById('trans-kpi-acreditadas').innerText = `${ev.semanas_acreditadas_al_corte} sem`;
+      document.getElementById('trans-kpi-corte').innerText = ev.fecha_corte_aplicada;
+
+      if (ev.permite_continuar_simulacion) {
+        banner.className = 'alert alert-success';
+        banner.innerHTML = `<strong>✅ COBIJADO POR EL RÉGIMEN DE TRANSICIÓN:</strong> ${ev.explicacion}`;
+        btnStep4.style.display = 'inline-flex';
+      } else {
+        banner.className = 'alert alert-danger';
+        banner.innerHTML = `<strong>⛔ NO PROCEDE LA SIMULACIÓN DE LEY 100:</strong> ${ev.explicacion}`;
+        btnStep4.style.display = 'none';
+      }
+
+      document.getElementById('trans-legal-notes').innerHTML = `
+        <strong>Fundamento Jurídico:</strong> ${ev.fuente_juridica}.<br>
+        <em>Sentencia C-264 de 2026:</em> La Corte Constitucional difirió la entrada en vigor al 1 de abril de 2027. Las semanas acreditadas documentalmente con anterioridad a esa fecha amparan la conservación íntegra de la Ley 100 de 1993.
+      `;
+    }
+
+    async function runSimulation() {
+      const ibcVal = parseFloat(document.getElementById('esc1-ibc').value) || 3000000;
+      const crecVal = (parseFloat(document.getElementById('esc1-crecimiento').value) || 5.0) / 100.0;
+      const infVal = (parseFloat(document.getElementById('esc1-inflacion').value) || 4.0) / 100.0;
+      const smlmvVal = (parseFloat(document.getElementById('esc1-smlmv').value) || 5.5) / 100.0;
+
+      const payload = {
+        historia: laborHistory,
+        escenarios: [
+          {
+            escenario_id: "esc_base",
+            nombre: "Escenario Principal",
+            ibc_futuro_inicial: ibcVal,
+            fecha_inicio_ibc: "2026-01-01",
+            crecimiento_anual_nominal: crecVal,
+            periodos_sin_aporte: [],
+            supuesto_inflacion: infVal,
+            supuesto_crecimiento_smlmv: smlmvVal
+          }
+        ]
+      };
+
+      try {
+        const resp = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          alert(data.error || "No fue posible realizar la simulación.");
+          return;
+        }
+
+        simulationResults = data.results;
+        renderSimulationResults(data.results[0]);
+        goToStep(5);
+      } catch (err) {
+        alert("Error al simular: " + err.message);
+      }
+    }
+
+    function renderSimulationResults(res) {
+      const out = document.getElementById('simulation-output');
+
+      const isDeficit = !res.cumple_semanas;
+      const badgeStatus = isDeficit
+        ? '<span class="badge badge-danger">DÉFICIT PENSIONAL</span>'
+        : '<span class="badge badge-success">CUMPLE REQUISITOS ORDINARIOS</span>';
+
+      let mesadaHTML = '';
+      if (isDeficit) {
+        mesadaHTML = `
+          <div class="alert alert-danger" style="margin-top: 1rem;">
+            <strong>Déficit Pensional a la Edad Legal:</strong> Faltan <strong>${res.deficit_semanas} semanas</strong> para reunir el requisito legal de ${res.semanas_exigidas} semanas.<br>
+            <em>Por regla de producto y estricto mandato legal, no se calcula una mesada pagadera si la persona no reúne los requisitos al alcanzar la edad ordinaria de retiro.</em>
+          </div>
+        `;
+      } else {
+        mesadaHTML = `
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-lbl">Mesada Bruta Estimada</div>
+              <div class="kpi-val">$${Number(res.mesada_bruta).toLocaleString('es-CO')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${res.limite_aplicado !== 'NINGUNO' ? res.limite_aplicado : 'Cálculo de Fórmula'}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Aporte a Salud (${res.descuento_salud_pct}%)</div>
+              <div class="kpi-val" style="color: var(--danger);">-$${Number(res.descuento_salud_monto).toLocaleString('es-CO')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Obligatorio en Colombia</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Valor Estimado Tras Descuentos</div>
+              <div class="kpi-val" style="color: var(--success);">$${Number(res.valor_despues_descuentos).toLocaleString('es-CO')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Equivale a ${res.equivalente_smlmv} SMLMV</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Poder Adquisitivo (Base 2026)</div>
+              <div class="kpi-val" style="color: var(--text);">$${Number(res.valor_real_poder_adquisitivo).toLocaleString('es-CO')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Pesos reales deflactados</div>
+            </div>
+          </div>
+        `;
+      }
+
+      out.innerHTML = `
+        <div class="card">
+          <div class="card-title">
+            <span>Resultados de la Simulación (${res.escenario_nombre})</span>
+            ${badgeStatus}
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-lbl">Horizonte Legal de Edad</div>
+              <div class="kpi-val" style="font-size: 1.15rem;">${res.fecha_cumplimiento_edad_legal}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Edad ordinaria: ${res.edad_legal} años</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Semanas Exigidas</div>
+              <div class="kpi-val">${res.semanas_exigidas}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Año ${res.fecha_cumplimiento_edad_legal.substring(0,4)} (C-197 / L.797)</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Semanas Totales Proyectadas</div>
+              <div class="kpi-val">${res.semanas_totales_a_la_edad}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${res.semanas_acreditadas_documentales} doc + ${res.semanas_futuras_proyectadas} fut</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Tasa de Reemplazo</div>
+              <div class="kpi-val">${res.tasa_reemplazo_final_pct ? res.tasa_reemplazo_final_pct + '%' : 'N/A'}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Tope legal máx. 80%</div>
+            </div>
+          </div>
+
+          ${mesadaHTML}
+
+          <!-- Desglose paso a paso -->
+          <details open>
+            <summary>Explicación Detallada del Cálculo Pensional</summary>
+            <ul>
+              ${res.desglose_explicativo.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </details>
+        </div>
+      `;
+    }
+
+    async function openCatalogModal() {
+      const modal = document.getElementById('catalog-modal');
+      modal.classList.add('active');
+      const box = document.getElementById('catalog-content');
+
+      try {
+        const resp = await fetch('/api/catalog');
+        const data = await resp.json();
+        box.innerHTML = data.rules.map(r => `
+          <div style="border-bottom: 1px solid var(--border); padding: 0.75rem 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:var(--primary); font-size:0.95rem;">${r.norma} - ${r.articulo_o_sentencia}</strong>
+              <span class="badge badge-success">${r.estado}</span>
+            </div>
+            <p style="font-size:0.85rem; margin: 4px 0;">${r.interpretacion_implementada}</p>
+            <div style="font-size:0.75rem; color:var(--text-muted);">
+              <strong>Fuente oficial:</strong> <a href="${r.url_oficial}" target="_blank" rel="noopener">${r.url_oficial}</a> | 
+              <strong>Consultada:</strong> ${r.fecha_consulta}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        box.innerHTML = `<div class="alert alert-danger">Error al cargar catálogo: ${err.message}</div>`;
+      }
+    }
+
+    function closeCatalogModal() {
+      document.getElementById('catalog-modal').classList.remove('active');
+    }
+
+    async function resetSession() {
+      if (confirm("¿Desea borrar toda la sesión y los datos cargados en memoria?")) {
+        await fetch('/api/reset-session', { method: 'POST' });
+        laborHistory = null;
+        lastUploadedFile = null;
+        simulationResults = [];
+        goToStep(1);
+      }
+    }
+
+    function exportResultsJSON() {
+      if (!simulationResults || simulationResults.length === 0) return;
+      const blob = new Blob([JSON.stringify({ laborHistory, simulationResults }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MiPensionCO_Simulacion_${new Date().toISOString().substring(0,10)}.json`;
+      a.click();
+    }
+  </script>
+
+</body>
+</html>

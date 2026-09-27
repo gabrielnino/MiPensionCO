@@ -1,32 +1,60 @@
 # MiPensiónCO 🇨🇴
 
-**MiPensiónCO** es una aplicación y simulador pensional diseñado para los trabajadores y cotizantes en Colombia. Permite proyectar la pensión considerando las reglas del sistema pensional colombiano, tanto bajo el régimen tradicional (Ley 100 de 1993 / Colpensiones y Fondos Privados) como bajo el nuevo modelo de pilares (Ley 2381 de 2024).
+**Simulador Pensional Ordinario Local para Afiliados a Colpensiones en Régimen de Transición (Ley 100 de 1993)**
 
 ---
 
-## 🎯 Objetivos del Proyecto
+## 🎯 Descripción General
 
-- **Simulación Rápida y Precisa:** Calcular edad de pensión, semanas cotizadas acumuladas y faltantes, y estimación de mesada pensional.
-- **Comparativa de Regímenes:**
-  - Régimen de Prima Media (Colpensiones).
-  - Régimen de Ahorro Individual con Solidaridad (Fondos privados: Porvenir, Protección, Colfondos, Skandia).
-  - Nuevo Sistema de Pilares (Pilar Solidario, Semicontributivo, Contributivo y Ahorro Voluntario).
-- **Régimen de Transición:** Diagnóstico automático para saber si al usuario le aplica el régimen de transición (750 semanas en mujeres / 900 semanas en hombres a julio de 2025).
-- **Interfaz Intuitiva y Amigable:** Lenguaje claro y adaptado a la realidad del cotizante colombiano.
+**MiPensiónCO** es una aplicación web local, determinista y respetuosa de la privacidad, diseñada para simular la pensión ordinaria de vejez de afiliados a Colpensiones que conservan las reglas de la Ley 100 de 1993 y sus modificaciones (Ley 797 de 2003), conforme al artículo 75 de la Ley 2381 de 2024 y la modulación jurisprudencial de la Sentencia **C-264 de 2026** de la Corte Constitucional.
+
+> **AVISO LEGAL:**  
+> Estimación puramente informativa basada en los datos documentales y supuestos indicados. El reconocimiento y liquidación pensional corresponden exclusivamente a Colpensiones.
 
 ---
 
-## 📌 Variables Clave del Sistema Colombiano
+## 🚀 Inicio Rápido
 
-- **Edad de jubilación:** 57 años para mujeres, 62 años para hombres.
-- **Semanas mínimas:**
-  - Colpensiones: 1.300 semanas (con la reducción progresiva para mujeres según fallos de la Corte Constitucional y nueva ley).
-  - Garantía de Pensión Mínima (fondos privados): 1.150 semanas.
-- **Salario Mínimo Legal Vigente (SMLMV):** Referencia base para límites inferiores y topes de pilares.
-- **IBL (Ingreso Base de Liquidación):** Promedio salarial de los últimos 10 años o de toda la vida laboral actualizada con IPC.
+```powershell
+# 1. Iniciar el servidor local
+python run_app.py
+
+# 2. Abrir en el navegador:
+# http://127.0.0.1:8000
+```
 
 ---
 
-## 🚀 Estado del Proyecto
+## 🔒 Privacidad y Funcionamiento Local
 
-Repositorio inicializado. En etapa de definición de arquitectura y componentes del simulador.
+- **100% Local:** Todo el procesamiento de los PDFs, los cálculos del IBL, el cómputo de semanas y la proyección se realizan en la memoria de su equipo.
+- **Sin Dependencias Cloud:** No utiliza servicios de inteligencia artificial externos, OCR en la nube ni telemetría.
+- **Sin Cuentas ni Registro:** No requiere creación de usuario ni almacena contraseñas de PDFs en disco o logs.
+- **Borrado de Sesión:** Permite purgar la información en memoria con un solo clic.
+
+---
+
+## 📚 Documentación Técnica y Jurídica
+
+- **[Cálculo y Límites Legales](docs/CALCULO_Y_LIMITES.md):** Metodología matemática y jurídica detallada (IBL 10 años vs toda la vida, tasa de reemplazo, garantía de pensión mínima, tope de 25 SMLMV, descuentos de salud y FSP).
+- **[Catálogo Jurídico](docs/CATALOGO_JURIDICO.md):** 14 reglas jurídicas verificadas con sus artículos, sentencias oficiales y estado de validación.
+- **[Tablas Económicas Oficiales](docs/TABLAS_ECONOMICAS.md):** Decretos de SMLMV (1990-2026) e IPC de empalme oficial DANE (1990-2026).
+- **[Guía de Ejecución y Pruebas](docs/GUIA_EJECUCION.md):** Comandos de inicio, cierre y verificación de calidad con `pytest`, `mypy` y `ruff`.
+
+---
+
+## 🧪 Pruebas Automatizadas y Calidad
+
+```powershell
+# Ejecutar 33 pruebas unitarias y de integración
+pytest -v
+
+# Cobertura de código (>90%)
+pytest -v --cov=src tests/
+
+# Análisis estático de tipos
+mypy --strict src/
+
+# Linter y estilo
+ruff check src/ tests/ run_app.py
+```

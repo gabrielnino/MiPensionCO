@@ -57,3 +57,6 @@ logs/
 *.log
 scratch/
 tmp/
+.coverage
+.coverage.*
+htmlcov/
