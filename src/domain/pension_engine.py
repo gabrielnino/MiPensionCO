@@ -15,7 +15,7 @@ Strictly follows statutory provisions:
 import calendar
 from dataclasses import replace
 from datetime import date, timedelta
-from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import Any
 
 from src.audit.models import (
@@ -873,10 +873,25 @@ class PensionEngine:
             if start_date >= end_date:
                 return res_recs
 
+            remaining_days = (
+                int(
+                    (
+                        max(
+                            Decimal(0),
+                            Decimal(required_weeks) - base_weeks - semanas_declaradas,
+                        )
+                        * 7
+                    ).to_integral_value(rounding=ROUND_CEILING)
+                )
+                if escenario.aportar_hasta_minimo
+                else None
+            )
             cur_y, cur_m = start_date.year, start_date.month
             while (cur_y < end_date.year) or (
                 cur_y == end_date.year and cur_m <= end_date.month
             ):
+                if remaining_days == 0:
+                    break
                 m_start = max(start_date, date(cur_y, cur_m, 1))
                 m_last_day = calendar.monthrange(cur_y, cur_m)[1]
                 m_end = min(
@@ -897,6 +912,22 @@ class PensionEngine:
                             paused_days += (inter_e - inter_s).days + 1
 
                     active_cal_days = max(0, span_cal_days - paused_days)
+
+                    if remaining_days is not None and active_cal_days > 0:
+                        allowed_days = min(active_cal_days, remaining_days)
+                        credited = 0
+                        for offset in range(span_cal_days):
+                            contribution_day = m_start + timedelta(days=offset)
+                            if any(
+                                a <= contribution_day <= b for a, b in merged_pauses
+                            ):
+                                continue
+                            credited += 1
+                            if credited == allowed_days:
+                                m_end = contribution_day
+                                break
+                        active_cal_days = allowed_days
+                        remaining_days -= allowed_days
 
                     if active_cal_days > 0:
                         # Finding E: Separate calendar coverage days from 30-day billing convention
@@ -1025,6 +1056,12 @@ class PensionEngine:
         desglose.append(f"Total semanas a la edad legal: {semanas_totales}.")
 
         scenario_inputs: dict[str, Any] = {
+            "aportar_hasta_minimo": escenario.aportar_hasta_minimo,
+            "fecha_fin_aportes_proyectados": projected_future_records[
+                -1
+            ].periodo_fin.isoformat()
+            if projected_future_records
+            else None,
             "ibc_futuro": str(escenario.ibc_futuro_inicial),
             "ibc_futuro_nominal": str(escenario.ibc_futuro_inicial),
             "fecha_inicio": escenario.fecha_inicio_ibc.isoformat(),
@@ -1035,6 +1072,8 @@ class PensionEngine:
             "motivo_terminacion_o_pausa_aportes": (
                 "Superó edad legal ordinaria previa a la simulación; no se proyectan aportes hacia el pasado."
                 if ya_supero_edad
+                else "Mínimo requerido alcanzado; cesan los aportes, se mantiene la edad de retiro."
+                if escenario.aportar_hasta_minimo and cumple_semanas
                 else "Llegada a la fecha de cumplimiento de edad legal ordinaria (horizonte fijo de retiro)."
             ),
             "supuestos_economicos": {

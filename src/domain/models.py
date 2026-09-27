@@ -221,6 +221,7 @@ class EscenarioConfig:
     periodos_sin_aporte: list[tuple[date, date]] = field(default_factory=list)
     supuesto_inflacion: Decimal = Decimal("0.040")
     supuesto_crecimiento_smlmv: Decimal = Decimal("0.055")
+    aportar_hasta_minimo: bool = False
 
 
 @dataclass(frozen=True)

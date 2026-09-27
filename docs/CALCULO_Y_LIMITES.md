@@ -121,3 +121,15 @@ acreditados. Duplicados exactos y exclusiones no agregan días. El total documen
 se redondea a dos decimales. Los intervalos de fechas exactas conservan el cómputo
 calendario anterior. La transición reutiliza el mismo cómputo con su fecha de corte.
 La regla distingue tipos de evidencia; no modifica los días originales del PDF.
+
+
+### Aportes hasta el mínimo por escenario
+
+La interfaz marca por defecto «Aportar hasta completar el mínimo requerido».
+La opción es independiente por escenario y viaja como `aportar_hasta_minimo`.
+Se limita la proyección a los días necesarios para completar las semanas exigidas
+al horizonte de retiro, respetando pausas y sin generar aportes si ya cumple.
+Se conserva la edad de retiro y se auditan la opción y la fecha final de aportes.
+El último día puede superar el mínimo en una fracción de semana. Si no alcanza
+antes del horizonte, se conserva el déficit. Clientes antiguos que omiten la opción
+mantienen la proyección hasta la edad de retiro.

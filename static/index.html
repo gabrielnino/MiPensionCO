@@ -2055,6 +2055,14 @@
               <label>Supuesto de Inflación Anual (%):</label>
               <input type="number" class="form-control" value="${esc.inf}" step="0.1" onchange="scenarioList[${idx}].inf = parseFloat(this.value)||4.0">
             </div>
+            <div class="form-group" style="justify-content: center; grid-column: span 2;">
+              <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
+                <input type="checkbox" class="scenario-stop-minimum" ${esc.hastaMinimo !== false ? 'checked' : ''}
+                  onchange="scenarioList[${idx}].hastaMinimo = this.checked">
+                Aportar hasta completar el mínimo requerido
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Al desmarcar, se proyectan aportes hasta la edad de retiro. La edad de retiro no cambia.</span>
+            </div>
           </div>
         `;
         container.appendChild(card);
@@ -2090,6 +2098,7 @@
           nombre: esc.nombre,
           ibc_futuro_inicial: esc.ibc,
           fecha_inicio_ibc: "2026-01-01",
+          aportar_hasta_minimo: esc.hastaMinimo !== false,
           crecimiento_anual_nominal: esc.crec / 100.0,
           periodos_sin_aporte: esc.pausas || [],
           supuesto_inflacion: esc.inf / 100.0,
