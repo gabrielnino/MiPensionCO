@@ -8,6 +8,7 @@ Enforces Colombian legal pension rules and data integrity:
 - Conforms strictly to Clean Code, SOLID, and static type safety.
 """
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -16,6 +17,7 @@ from src.domain.models import (
     HistoriaLaboral,
     ProvenanceType,
 )
+from src.domain.pension_engine import PensionEngine
 
 
 def validate_cotizacion_record(record: CotizacionRecord) -> list[dict[str, str]]:
@@ -197,44 +199,49 @@ def reconcile_labor_history(historia: HistoriaLaboral) -> dict[str, Any]:
         r for r in active_records if r.origen == ProvenanceType.CORRECCION_MANUAL
     ]
 
-    # Weekly compute: 7 calendar days = 1 pension week (SL138-2024)
-    # Detail from PDF
-    total_dias_pdf = sum(r.dias_cotizados for r in pdf_detail)
-    semanas_recalculadas_detalle = (
-        Decimal(str(round(total_dias_pdf / 7, 2)))
-        if total_dias_pdf > 0
-        else Decimal("0.00")
+    # Use the same calendar convention and overlap policy as the simulation.
+    reviewed_detail = pdf_detail + corrected
+    semanas_recalculadas_detalle = PensionEngine.compute_calendar_weeks(reviewed_detail)
+    semanas_declaradas, declared_overlap = PensionEngine.additional_declared_weeks(
+        reviewed_detail, declared
     )
-
-    # Declared
-    total_dias_decl = sum(r.dias_cotizados for r in declared)
-    semanas_declaradas = (
-        Decimal(str(round(total_dias_decl / 7, 2)))
-        if total_dias_decl > 0
-        else Decimal("0.00")
+    semanas_excluidas = PensionEngine.compute_calendar_weeks(
+        [replace(r, excluido_del_calculo=False) for r in excluded_records]
     )
-
-    # Excluded
-    total_dias_excl = sum(r.dias_cotizados for r in excluded_records)
-    semanas_excluidas = (
-        Decimal(str(round(total_dias_excl / 7, 2)))
-        if total_dias_excl > 0
-        else Decimal("0.00")
-    )
-
-    # Total active
-    total_dias_activos = sum(r.dias_cotizados for r in active_records)
-    semanas_totales_activas = (
-        Decimal(str(round(total_dias_activos / 7, 2)))
-        if total_dias_activos > 0
-        else Decimal("0.00")
-    )
+    semanas_totales_activas = PensionEngine.compute_calendar_weeks(active_records)
 
     # Net difference between recognized PDF summary and recalculation
     diferencia = (semanas_recalculadas_detalle - semanas_reconocidas_pdf).quantize(
         Decimal("0.01")
     )
-    tiene_discrepancia = abs(diferencia) >= Decimal("1.00")
+    boundaries = [750, 900]
+    if historia.sexo is not None and historia.fecha_nacimiento is not None:
+        horizon = PensionEngine.calculate_retirement_horizon_date(
+            historia.fecha_nacimiento, historia.sexo
+        )
+        required = PensionEngine.get_required_weeks_for_year(
+            horizon.year, historia.sexo
+        )
+        boundaries.extend(
+            range(
+                required,
+                max(
+                    required,
+                    int(max(semanas_reconocidas_pdf, semanas_recalculadas_detalle)),
+                )
+                + 1,
+                50,
+            )
+        )
+    crosses_boundary = any(
+        min(semanas_reconocidas_pdf, semanas_recalculadas_detalle)
+        < boundary
+        <= max(semanas_reconocidas_pdf, semanas_recalculadas_detalle)
+        for boundary in boundaries
+    )
+    tiene_discrepancia = semanas_reconocidas_pdf > 0 and (
+        abs(diferencia) >= Decimal("1.00") or crosses_boundary
+    )
 
     # Pending matters checklist
     asuntos_pendientes: list[str] = []
@@ -269,6 +276,15 @@ def reconcile_labor_history(historia: HistoriaLaboral) -> dict[str, Any]:
 
     validation_issues = validate_labor_history_periods(historia.registros)
     blocking_errors = [i for i in validation_issues if i["severity"] == "ERROR"]
+
+    if tiene_discrepancia:
+        blocking_errors.append({"message": asuntos_pendientes[0]})
+    if declared_overlap:
+        blocking_errors.append(
+            {
+                "message": "Superposición de declaraciones: requiere revisión antes de continuar."
+            }
+        )
 
     return {
         "semanas_reconocidas_pdf": semanas_reconocidas_pdf,

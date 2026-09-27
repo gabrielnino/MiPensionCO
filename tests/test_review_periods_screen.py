@@ -165,9 +165,9 @@ def test_reconciliation_summary_metrics() -> None:
     # 1. Recognized in PDF
     assert recon["semanas_reconocidas_pdf"] == Decimal("1200.00")
     # 2. Recalculated from detail (PDF only)
-    assert recon["semanas_recalculadas_detalle"] == Decimal("52.29")
+    assert recon["semanas_recalculadas_detalle"] == Decimal("52.28")
     # 3. Additional user declared
-    assert recon["semanas_declaradas_adicionales"] == Decimal("25.86")
+    assert recon["semanas_declaradas_adicionales"] == Decimal("25.85")
     # 4. Total active considered
     assert recon["semanas_totales_activas"] == Decimal("78.14")
     # 5. Difference between recognized and detail

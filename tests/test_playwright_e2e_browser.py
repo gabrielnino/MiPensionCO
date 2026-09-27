@@ -13,6 +13,7 @@ Strictly verifies the complete 11-point workflow in a real browser:
 10. XSS defense in real browser (script injection harmlessly rendered as text).
 """
 
+import calendar
 import io
 import tempfile
 import threading
@@ -80,7 +81,7 @@ def create_multipage_synthetic_test_pdf(
         "900987654  SERVICIOS ANDINOS LTDA  01/01/2015  31/12/2024  $3.800.000  521,43  0,00  0,00  521,43",
         fontsize=7,
     )
-    page1.insert_text((40, 290), "TOTAL GENERAL DE SEMANAS: 1042.86", fontsize=9)
+    page1.insert_text((40, 290), "TOTAL GENERAL DE SEMANAS: 1043.57", fontsize=9)
 
     # Page 2: Monthly Details
     page2 = doc.new_page(width=595, height=842)
@@ -92,16 +93,18 @@ def create_multipage_synthetic_test_pdf(
         "Periodo Inicio  Periodo Fin  Dias  IBC (COP)  Empleador",
         fontsize=7,
     )
-    detail_rows = [
-        "01/01/2024  31/01/2024  30  $ 3.800.000  SERVICIOS ANDINOS LTDA",
-        "01/02/2024  29/02/2024  30  $ 3.800.000  SERVICIOS ANDINOS LTDA",
-        "01/03/2024  31/03/2024  30  $ 3.800.000  SERVICIOS ANDINOS LTDA",
-        "01/04/2024  30/04/2024  30  $ 3.800.000  SERVICIOS ANDINOS LTDA",
-    ]
+    # A complete synthetic history is required for the successful review path.
     y = 75
-    for r in detail_rows:
-        page2.insert_text((40, y), r, fontsize=7)
-        y += 15
+    for year in range(2005, 2025):
+        for month in range(1, 13):
+            if y > 790:
+                page2 = doc.new_page(width=595, height=842)
+                page2.insert_text((40, 40), "DETALLE DE PAGOS POR CICLO", fontsize=10)
+                y = 75
+            days = calendar.monthrange(year, month)[1]
+            row = f"01/{month:02d}/{year} {days:02d}/{month:02d}/{year} {days} $ 3.800.000 SERVICIOS ANDINOS LTDA"
+            page2.insert_text((40, y), row, fontsize=7)
+            y += 15
 
     buf = io.BytesIO()
     doc.save(buf)

@@ -165,6 +165,17 @@ class PensionEngine:
 
         umbral = cls.get_transition_threshold(historia.sexo)
 
+        has_exclusions = any(r.excluido_del_calculo for r in historia.registros)
+        if has_exclusions:
+            # Keep the original documentary summary intact, but do not use it to
+            # silently reintroduce excluded coverage into this evaluation.
+            historia = replace(
+                historia,
+                registros=[r for r in historia.registros if not r.excluido_del_calculo],
+                semanas_resumen_colpensiones=Decimal(0),
+                periodos_desconocidos_o_faltantes=True,
+            )
+
         # Compute accredited weeks up to cutoff date
         # Finding 2.4 fix: Cap each period's credit to min(dias_cotizados, span_days)
         accredited_days_to_cutoff: set[date] = set()

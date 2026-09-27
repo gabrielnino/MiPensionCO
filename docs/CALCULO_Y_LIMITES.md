@@ -83,3 +83,14 @@ Cada simulación crea un proyector económico independiente con la inflación y 
 Las declaraciones solo añaden días que no están cubiertos por los intervalos documentales ni por otras declaraciones. Las superposiciones quedan pendientes de revisión y bloquean la mesada y sus descuentos: podrían representar una corrección o un empleador simultáneo y no deben duplicar salarios en el IBL. Se conserva la evidencia original. Si una declaración parcial se superpone, no se le asignan fechas exactas inventadas ni semanas adicionales hasta aclarar su cobertura. El desglose de auditoría incluye `declaradas_adicionales`.
 
 Pruebas de regresión: `tests/test_scenario_economics_and_overlap.py`. Incluyen crecimiento cero y 20 %, reutilización del motor, inflación para pesos reales, superposiciones totales/parciales y bloqueo aun cuando se reúnen las semanas mínimas.
+
+
+## Consistencia de revisión y transición
+
+La pantalla de revisión reutiliza el conteo calendario del motor: unión de días, exclusiones y truncamiento de semanas, sin sumar empleadores simultáneos ni redondear hacia arriba. Las correcciones de IBC conservan la cobertura del registro revisado. Las declaraciones muestran únicamente días adicionales no superpuestos.
+
+Una discrepancia de al menos una semana, o menor si cruza el umbral de transición o el requisito/bloques aplicables al horizonte, impide confirmar la revisión. Se devuelve el diagnóstico sin incrementar la versión ni registrar una confirmación exitosa. Debe completarse o corregirse el detalle con soporte; no se ofrece aceptación automática de la diferencia.
+
+La evaluación de transición omite los registros excluidos. Si existen exclusiones, el resumen permanece intacto como evidencia original, pero no puede reincorporar silenciosamente los períodos retirados: el cumplimiento debe sostenerse con los registros activos. Si estos no bastan, se informa insuficiencia documental.
+
+Pruebas: `tests/test_review_consistency.py`; Chromium cubre tanto el bloqueo de un reporte incompleto como el avance de una historia sintética completa.

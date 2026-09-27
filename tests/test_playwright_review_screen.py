@@ -296,26 +296,12 @@ def test_review_periods_screen_full_e2e(review_server_url: str) -> None:
         page.click("#btn-to-review-periods")
         page.wait_for_selector("#step-panel-3", state="visible")
 
-        # 10. Confirm Periods and Evaluate Transition (Advances to Step 4)
+        # This deliberately incomplete detail must NOT pass reconciliation.
         page.click("#btn-confirm-periods-to-transition")
-        page.wait_for_selector("#step-panel-4", state="visible", timeout=10000)
-
-        # Transition evaluation should pass for female affiliate born in 1968
-        assert "COBIJADO POR EL RÉGIMEN DE TRANSICIÓN" in page.inner_text(
-            "#transition-result-banner"
-        )
-
-        # 11. Advance to Step 5: Scenario Configuration
-        page.click("#btn-to-step-4")
-        page.wait_for_selector("#step-panel-5", state="visible")
-
-        # 12. Run Simulation and Advance to Step 6: Results
-        page.click("#btn-run-simulation")
-        page.wait_for_selector("#step-panel-6", state="visible", timeout=10000)
-
-        # Verify simulation results cards rendered
-        res_cards = page.locator("#simulation-output .card")
-        assert res_cards.count() >= 2
+        page.wait_for_selector("#review-validation-errors-box", state="visible")
+        assert "Discrepancia" in page.inner_text("#review-validation-errors-box")
+        assert page.is_visible("#step-panel-3")
+        assert not page.is_visible("#step-panel-4")
 
         # 13. Open Audit and verify revision data was recorded
         page.click("button:has-text('Auditoría de la Simulación')")

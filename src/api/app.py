@@ -650,6 +650,25 @@ async def save_revision_endpoint(req: SaveRevisionRequestDTO) -> JSONResponse:
             },
         )
 
+    recon = reconcile_labor_history(historia)
+    if not recon["permite_continuar"]:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error_message": "Debe resolver la conciliación de semanas antes de continuar.",
+                "blocking_errors": recon["errores_bloqueantes"],
+                "issues": [
+                    {
+                        "code": "CONCILIACION_PENDIENTE",
+                        "severity": "ERROR",
+                        "message": message,
+                    }
+                    for message in recon["errores_bloqueantes"]
+                ],
+            },
+        )
+
     # Assign new revision version
     historia.revision_version += 1
     historia.revision_id = f"rev_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
