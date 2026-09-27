@@ -176,24 +176,7 @@ class PensionEngine:
                 periodos_desconocidos_o_faltantes=True,
             )
 
-        # Compute accredited weeks up to cutoff date
-        # Finding 2.4 fix: Cap each period's credit to min(dias_cotizados, span_days)
-        accredited_days_to_cutoff: set[date] = set()
-        for r in historia.registros:
-            if r.periodo_inicio <= cutoff_date:
-                p_end = min(r.periodo_fin, cutoff_date)
-                span_days = (p_end - r.periodo_inicio).days + 1
-                if span_days > 0 and r.dias_cotizados > 0:
-                    effective_days = min(r.dias_cotizados, span_days)
-                    for offset in range(effective_days):
-                        accredited_days_to_cutoff.add(
-                            r.periodo_inicio + timedelta(days=offset)
-                        )
-
-        # Convert unique calendar days to weeks (7 days = 1 week per SL138-2024)
-        semanas_al_corte = (
-            Decimal(len(accredited_days_to_cutoff)) / Decimal(7)
-        ).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
+        semanas_al_corte = cls.compute_calendar_weeks(historia.registros, cutoff_date)
 
         latest_record_date = (
             max([r.periodo_fin for r in historia.registros])
@@ -332,6 +315,7 @@ class PensionEngine:
                         origen=r.origen,
                         pagina=r.pagina,
                         fila=r.fila,
+                        periodo_mensual_reportado=r.periodo_mensual_reportado,
                         dias_pendientes_validacion=r.dias_pendientes_validacion,
                         source_fragment_ids=r.source_fragment_ids,
                         record_id=r.record_id,
@@ -350,11 +334,12 @@ class PensionEngine:
         registros: list[CotizacionRecord],
         horizon_date: date | None = None,
     ) -> Decimal:
-        """Computes total weeks using exact calendar days (SL138-2024: 7 days = 1 week).
+        """Count reported monthly credit separately from exact calendar intervals.
 
-        Eliminates duplicate days caused by simultaneous employers.
-        For partial periods, credits min(dias_cotizados, span_days).
-        If horizon_date is specified, clips all records to horizon_date (Finding F).
+        Official YYYYMM rows preserve credited days, aggregate to 30 per month,
+        and round the documentary total to two decimals. Exact-date records retain
+        the calendar union and existing rounding policy. Never manufacture exact
+        coverage dates for an employer from a monthly reporting boundary.
         """
         active_records = [
             r
@@ -366,16 +351,44 @@ class PensionEngine:
             if not r.excluido_del_calculo
         ]
         cotized_days: set[date] = set()
+        monthly_days: dict[tuple[int, int], int] = {}
+        seen_monthly: set[tuple[date, date, str, int, Decimal]] = set()
         for r in active_records:
             span_days = (r.periodo_fin - r.periodo_inicio).days + 1
             if span_days <= 0 or r.dias_cotizados <= 0:
+                continue
+            if r.periodo_mensual_reportado:
+                # YYYYMM is a reporting month, not an exact start date for every
+                # employer. Preserve credited days, including 30-day February.
+                key = (r.periodo_inicio.year, r.periodo_inicio.month)
+                identity = (
+                    r.periodo_inicio,
+                    r.periodo_fin,
+                    r.nit or r.aportante,
+                    r.dias_cotizados,
+                    r.ibc,
+                )
+                if identity not in seen_monthly:
+                    monthly_days[key] = min(
+                        30, monthly_days.get(key, 0) + r.dias_cotizados
+                    )
+                    seen_monthly.add(identity)
                 continue
             effective_days = min(r.dias_cotizados, span_days)
             for offset in range(effective_days):
                 cotized_days.add(r.periodo_inicio + timedelta(days=offset))
 
-        return (Decimal(len(cotized_days)) / Decimal(7)).quantize(
-            Decimal("0.01"), rounding=ROUND_FLOOR
+        # Do not add exact-day declarations twice to a documentary month.
+        exact_by_month: dict[tuple[int, int], int] = {}
+        for day in cotized_days:
+            key = (day.year, day.month)
+            exact_by_month[key] = exact_by_month.get(key, 0) + 1
+        days = sum(
+            max(monthly_days.get(key, 0), exact_by_month.get(key, 0))
+            for key in monthly_days.keys() | exact_by_month.keys()
+        )
+        return (Decimal(days) / Decimal(7)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP if monthly_days else ROUND_FLOOR
         )
 
     @classmethod

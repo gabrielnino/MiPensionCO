@@ -101,6 +101,7 @@ class CotizacionRecordDTO(BaseModel):
     origen: str = "PDF"
     pagina: int = 1
     fila: int = 1
+    periodo_mensual_reportado: bool = False
     dias_pendientes_validacion: bool = False
     excluido_del_calculo: bool = False
     motivo_exclusion: str = ""
@@ -235,6 +236,7 @@ def dto_to_domain(dto: HistoriaLaboralDTO) -> HistoriaLaboral:
                 origen=orig_enum,
                 pagina=r.pagina,
                 fila=r.fila,
+                periodo_mensual_reportado=r.periodo_mensual_reportado,
                 dias_pendientes_validacion=r.dias_pendientes_validacion,
                 source_fragment_ids=tuple(r.source_fragment_ids),
                 record_id=r.record_id or f"p{r.pagina}_f{r.fila}_{p_ini.isoformat()}",
@@ -347,6 +349,7 @@ def domain_to_dto(historia: HistoriaLaboral) -> HistoriaLaboralDTO:
             origen=r.origen.value if hasattr(r.origen, "value") else str(r.origen),
             pagina=r.pagina,
             fila=r.fila,
+            periodo_mensual_reportado=r.periodo_mensual_reportado,
             dias_pendientes_validacion=r.dias_pendientes_validacion,
             excluido_del_calculo=r.excluido_del_calculo,
             motivo_exclusion=r.motivo_exclusion,
@@ -391,6 +394,7 @@ def domain_to_dto(historia: HistoriaLaboral) -> HistoriaLaboralDTO:
             origen=r.origen.value if hasattr(r.origen, "value") else str(r.origen),
             pagina=r.pagina,
             fila=r.fila,
+            periodo_mensual_reportado=r.periodo_mensual_reportado,
             dias_pendientes_validacion=r.dias_pendientes_validacion,
             excluido_del_calculo=r.excluido_del_calculo,
             motivo_exclusion=r.motivo_exclusion,

@@ -58,6 +58,7 @@ class CotizacionRecord:
     origen: ProvenanceType = ProvenanceType.PDF
     pagina: int = 1
     fila: int = 1
+    periodo_mensual_reportado: bool = False
     dias_pendientes_validacion: bool = False
     source_fragment_ids: tuple[str, ...] = ()
     record_id: str = ""
@@ -83,6 +84,7 @@ class CotizacionRecord:
             "origen": self.origen.value,
             "pagina": self.pagina,
             "fila": self.fila,
+            "periodo_mensual_reportado": self.periodo_mensual_reportado,
             "dias_pendientes_validacion": self.dias_pendientes_validacion,
             "source_fragment_ids": list(self.source_fragment_ids),
             "record_id": self.record_id,

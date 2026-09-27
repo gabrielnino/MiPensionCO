@@ -248,6 +248,7 @@ class ColpensionesPDFReader:
                             fecha_pago=cls.parse_colombian_date(values[38]),
                             pagina=page_number,
                             fila=row_index,
+                            periodo_mensual_reportado=True,
                             dias_pendientes_validacion=pending,
                             source_fragment_ids=(fragment_id,),
                         )

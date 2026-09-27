@@ -110,3 +110,14 @@ El recálculo calendario puede diferir del resumen certificado: esa diferencia s
 muestra y requiere revisión, sin modificar el certificado ni inventar fechas exactas
 para días parciales dentro de un mes. Esta corrección del lector no cambia las
 reglas de cómputo del motor.
+
+
+### Días de períodos mensuales documentales
+
+Las filas oficiales AAAAMM llevan `periodo_mensual_reportado`, conservado en la
+API y en la revisión. Se suman días cotizados por mes con límite de 30, sin
+asignar todos los aportantes al primer día del mes; febrero conserva los días
+acreditados. Duplicados exactos y exclusiones no agregan días. El total documental
+se redondea a dos decimales. Los intervalos de fechas exactas conservan el cómputo
+calendario anterior. La transición reutiliza el mismo cómputo con su fecha de corte.
+La regla distingue tipos de evidencia; no modifica los días originales del PDF.
