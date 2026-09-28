@@ -1025,9 +1025,10 @@
     let simulationResults = [];
     let currentAuditData = null;
     let originalExtractedHistory = null;
+    const scenarioBaseSmlmv = Number("__SCENARIO_BASE_SMLMV__");
     let scenarioList = [
-      { id: "esc_base", nombre: "Escenario 1 (Base)", ibc: 3000000, crec: 5.0, inf: 4.0, smlmv: 5.5, pausas: [] },
-      { id: "esc_opt", nombre: "Escenario 2 (Optimista)", ibc: 5000000, crec: 6.0, inf: 4.0, smlmv: 5.5, pausas: [] }
+      { id: "esc_base", nombre: "Escenario 1 (Base)", ibc: scenarioBaseSmlmv, crec: 5.0, inf: 4.0, smlmv: 5.5, pausas: [] },
+      { id: "esc_opt", nombre: "Escenario 2 (Optimista)", ibc: 2 * scenarioBaseSmlmv, crec: 6.0, inf: 4.0, smlmv: 5.5, pausas: [] }
     ];
 
     // Stepper navigation (6 steps)
@@ -2023,6 +2024,20 @@
     }
 
     // Multi-Scenario Management
+    function setScenarioMinimums(idx, value) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return;
+      scenarioList[idx].ibc = Math.round(Math.min(25, Math.max(1, amount)) * scenarioBaseSmlmv);
+      renderScenarioCards();
+    }
+
+    function setScenarioIBC(idx, value) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      scenarioList[idx].ibc = Math.round(amount);
+      renderScenarioCards();
+    }
+
     function renderScenarioCards() {
       const container = document.getElementById('escenarios-container');
       container.innerHTML = '';
@@ -2044,7 +2059,7 @@
             </div>
             <div class="form-group">
               <label>IBC Futuro Inicial (COP):</label>
-              <input type="number" class="form-control" value="${esc.ibc}" step="50000" onchange="scenarioList[${idx}].ibc = parseFloat(this.value)||2000000">
+              <input type="number" class="form-control scenario-ibc" value="${esc.ibc}" step="1" onchange="setScenarioIBC(${idx}, this.value)">
               <span style="font-size: 0.75rem; color: var(--text-muted);">Entre 1 SMLMV y 25 SMLMV</span>
             </div>
             <div class="form-group">
@@ -2054,6 +2069,16 @@
             <div class="form-group">
               <label>Supuesto de Inflación Anual (%):</label>
               <input type="number" class="form-control" value="${esc.inf}" step="0.1" onchange="scenarioList[${idx}].inf = parseFloat(this.value)||4.0">
+              <label for="scenario-minimums-${idx}" style="margin-top:1.25rem;">Cantidad de salarios mínimos:</label>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <input id="scenario-minimums-${idx}" class="form-control scenario-minimums" type="number" min="1" max="25" step="0.1"
+                  value="${Number((esc.ibc / scenarioBaseSmlmv).toFixed(6))}" onchange="setScenarioMinimums(${idx}, this.value)">
+                <div style="display:flex; flex-direction:column; gap:0.2rem;">
+                  <button type="button" class="btn btn-outline btn-sm" aria-label="Aumentar un salario mínimo" onclick="setScenarioMinimums(${idx}, scenarioList[${idx}].ibc / scenarioBaseSmlmv + 1)">▲</button>
+                  <button type="button" class="btn btn-outline btn-sm" aria-label="Disminuir un salario mínimo" onclick="setScenarioMinimums(${idx}, scenarioList[${idx}].ibc / scenarioBaseSmlmv - 1)">▼</button>
+                </div>
+              </div>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Base 2026: 1 SMLMV = ${scenarioBaseSmlmv.toLocaleString('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0})}. Convierte el IBC inicial; no fija la mesada.</span>
             </div>
             <div class="form-group" style="justify-content: center; grid-column: span 2;">
               <label style="display:flex; align-items:center; gap:0.6rem;">
@@ -2089,7 +2114,7 @@
       scenarioList.push({
         id: `esc_${Date.now()}`,
         nombre: `Escenario ${num}`,
-        ibc: 3500000,
+        ibc: Math.min(25, num) * scenarioBaseSmlmv,
         crec: 5.0,
         inf: 4.0,
         smlmv: 5.5,

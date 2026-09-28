@@ -342,3 +342,31 @@ def test_review_periods_screen_full_e2e(review_server_url: str) -> None:
         # Verify form is clean
         assert page.input_value("#rev-fecha-nac") == ""
         assert page.input_value("#rev-sexo") == ""
+
+
+def test_scenario_minimum_wage_controls(review_server_url: str) -> None:
+    from src.economic.smlmv import HISTORICAL_SMLMV
+
+    wage = int(HISTORICAL_SMLMV[2026].monthly_amount)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(review_server_url)
+        page.evaluate("renderScenarioCards()")
+        controls = page.locator(".scenario-minimums")
+        assert controls.count() == 2
+        assert controls.nth(0).input_value() == "1"
+        assert controls.nth(1).input_value() == "2"
+        assert page.locator(".scenario-ibc").nth(1).input_value() == str(wage * 2)
+        page.evaluate("setScenarioMinimums(0, 3)")
+        assert page.locator(".scenario-ibc").first.input_value() == str(wage * 3)
+        page.evaluate(f"setScenarioIBC(0, {wage * 1.5})")
+        assert controls.first.input_value() == "1.5"
+        page.evaluate("addScenarioCard()")
+        assert controls.nth(2).input_value() == "3"
+        page.evaluate("removeScenarioCard(1)")
+        assert controls.nth(0).input_value() == "1.5"
+        assert controls.nth(1).input_value() == "3"
+        page.evaluate("setScenarioMinimums(0, 26)")
+        assert controls.first.input_value() == "25"
+        browser.close()

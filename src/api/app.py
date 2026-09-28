@@ -14,7 +14,6 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
-    FileResponse,
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
@@ -461,7 +460,11 @@ async def serve_index() -> Any:
         return HTMLResponse(
             "<h1>MiPensiónCO Backend Activo</h1><p>Archivo static/index.html en construcción.</p>"
         )
-    return FileResponse(index_file)
+    html = index_file.read_text(encoding="utf-8")
+    html = html.replace(
+        "__SCENARIO_BASE_SMLMV__", str(HISTORICAL_SMLMV[2026].monthly_amount)
+    )
+    return HTMLResponse(html)
 
 
 @app.post("/api/upload")

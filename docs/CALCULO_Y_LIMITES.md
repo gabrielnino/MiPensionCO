@@ -156,3 +156,14 @@ calendarios: no genera días ni IBC futuros y conserva los registros existentes.
 La evaluación sigue a la edad de retiro; si faltan semanas, se muestra el déficit
 y la mesada queda sin liquidar (no se presenta como una pensión de cero pesos).
 La selección queda registrada en la auditoría del escenario.
+
+
+### IBC inicial en salarios mínimos
+
+Cada escenario permite convertir una cantidad de SMLMV al IBC inicial. El valor
+unitario se entrega desde la tabla económica del servidor para 2026, el mismo año
+base del inicio de los escenarios. Los escenarios iniciales usan 1 y 2 mínimos;
+los nuevos usan su posición, con máximo de 25. Los controles admiten fracciones,
+las flechas suman o restan un mínimo, y editar el IBC actualiza la equivalencia.
+Eliminar escenarios no modifica los IBC de los restantes. La conversión no fija
+la mesada ni cambia los supuestos de crecimiento salarial posteriores.
