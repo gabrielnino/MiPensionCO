@@ -1,0 +1,2621 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiPensiónCO 🇨🇴 - Simulador Pensional de Vejez (Ley 100 / Transición)</title>
+  <style>
+    :root {
+      --primary: #0d47a1;
+      --primary-dark: #002171;
+      --primary-light: #e8eaf6;
+      --secondary: #00897b;
+      --accent: #f57f17;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --success: #15803d;
+      --success-bg: #f0fdf4;
+      --warning: #b45309;
+      --warning-bg: #fffbeb;
+      --info-bg: #eff6ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 1.25rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand h1 { font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .brand p { font-size: 0.85rem; opacity: 0.9; }
+
+    .header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .btn-light { background: white; color: var(--primary); }
+    .btn-light:hover { background: #f1f5f9; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--secondary); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-outline { background: transparent; border-color: var(--border); color: var(--text); }
+    .btn-outline:hover { background: #e2e8f0; }
+
+    .container {
+      max-width: 1150px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    /* Stepper navigation */
+    .stepper {
+      display: flex;
+      justify-content: space-between;
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+    }
+    .step-item.active {
+      color: var(--primary);
+      background: var(--primary-light);
+    }
+    .step-item.completed {
+      color: var(--success);
+    }
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+    }
+    .step-item.active .step-num { background: var(--primary); color: white; }
+    .step-item.completed .step-num { background: var(--success); color: white; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    /* Banners & alerts */
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+      border-left: 4px solid transparent;
+    }
+    .alert-info { background: var(--info-bg); border-left-color: var(--primary); color: #1e3a8a; }
+    .alert-success { background: var(--success-bg); border-left-color: var(--success); color: #065f46; }
+    .alert-warning { background: var(--warning-bg); border-left-color: var(--warning); color: #92400e; }
+    .alert-danger { background: var(--danger-bg); border-left-color: var(--danger); color: #991b1b; }
+
+    /* Upload Dropzone */
+    .dropzone {
+      border: 2px dashed var(--primary);
+      border-radius: 10px;
+      padding: 3rem 2rem;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      background: var(--primary-light);
+      border-color: var(--primary-dark);
+    }
+    .dropzone-icon { font-size: 3rem; margin-bottom: 1rem; color: var(--primary); }
+
+    /* Forms */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .form-control {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+      background: white;
+    }
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(13, 71, 161, 0.15);
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin-top: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    /* KPI Highlights */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+    .kpi-card {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .kpi-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin: 4px 0;
+    }
+    .kpi-lbl {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge-success { background: var(--success-bg); color: var(--success); }
+    .badge-danger { background: var(--danger-bg); color: var(--danger); }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); }
+    .badge-info { background: var(--info-bg); color: var(--primary); }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; }
+    .filter-btn.active { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; }
+    tr.row-excluded td { opacity: 0.6; text-decoration: line-through; }
+    tr.row-excluded td:last-child { text-decoration: none; opacity: 1; }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal.active { display: flex; }
+    .modal-box {
+      background: white;
+      border-radius: 10px;
+      max-width: 900px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 1.75rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    /* Accordion / Desglose */
+    details {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+    }
+    summary {
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--primary);
+    }
+    details ul {
+      margin-top: 0.5rem;
+      padding-left: 1.25rem;
+      font-size: 0.85rem;
+    }
+
+    .nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    /* Tabs inside audit modal */
+    .audit-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 1rem;
+      overflow-x: auto;
+    }
+    .audit-tab-btn {
+      padding: 0.5rem 1rem;
+      background: none;
+      border: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+    }
+    .audit-tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* Print styles */
+    @media print {
+      body { background: white; padding: 0; }
+      header, .stepper, .nav-buttons, .btn, .audit-tabs, .header-actions { display: none !important; }
+      .container { max-width: 100%; margin: 0; padding: 0; }
+      .card { border: none; box-shadow: none; padding: 0; margin-bottom: 2rem; }
+    }
+    .badge-extracted { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-notfound { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-review { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-user { background-color: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-declared { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+    .date-hint-es { font-size: 0.78rem; color: #334155; margin-top: 3px; font-style: italic; min-height: 1.1rem; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>🇨🇴 MiPensiónCO</h1>
+      <p>Simulador local informativo de Pensión de Vejez — Régimen de Transición (Ley 100 de 1993)</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-light" onclick="openAuditModal()">🔍 Auditoría de la Simulación</button>
+      <button class="btn btn-light" onclick="openCatalogModal()">📜 Catálogo Jurídico</button>
+      <button class="btn btn-outline" style="color:white; border-color:rgba(255,255,255,0.4);" onclick="openResetSessionModal()">🗑️ Borrar Sesión</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <div class="alert alert-info">
+      <strong>Aviso Legal y Privacidad Local:</strong> Ejecución 100% en memoria en su equipo (loopback local). No transmite información a internet ni guarda datos personales. El reconocimiento pensional corresponde exclusivamente a Colpensiones.
+    </div>
+
+    <!-- Stepper -->
+    <div class="stepper">
+      <div class="step-item active" id="step-nav-1" onclick="goToStep(1)">
+        <div class="step-num">1</div> Carga de Historia Laboral
+      </div>
+      <div class="step-item" id="step-nav-2" onclick="goToStep(2)">
+        <div class="step-num">2</div> Datos del Afiliado
+      </div>
+      <div class="step-item" id="step-nav-3" onclick="goToStep(3)">
+        <div class="step-num">3</div> Revisar Períodos y Semanas
+      </div>
+      <div class="step-item" id="step-nav-4" onclick="goToStep(4)">
+        <div class="step-num">4</div> Evaluación de Transición
+      </div>
+      <div class="step-item" id="step-nav-5" onclick="goToStep(5)">
+        <div class="step-num">5</div> Configuración de Escenarios
+      </div>
+      <div class="step-item" id="step-nav-6" onclick="goToStep(6)">
+        <div class="step-num">6</div> Resultados y Comparativa
+      </div>
+    </div>
+
+    <!-- STEP 1: CARGA DE PDF -->
+    <div class="step-panel" id="step-panel-1">
+      <div class="card">
+        <div class="card-title">Carga del Formato de Historia Laboral (PDF)</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+          Cargue su documento oficial expedido por Colpensiones. Si el archivo está protegido con clave, se le solicitará en pantalla para procesarlo localmente.
+        </p>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('pdf-file-input').click()">
+          <div class="dropzone-icon">📄</div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Arrastre su archivo PDF aquí o haga clic para seleccionarlo</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Soporta formatos unificados de Colpensiones con o sin contraseña</p>
+          <input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+        </div>
+
+        <div id="upload-status" style="margin-top: 1rem; display: none;"></div>
+      </div>
+    </div>
+
+    <!-- STEP 2: REVISION Y CORRECCION -->
+    <div class="step-panel" id="step-panel-2" style="display:none;">
+      <div class="card">
+        <div class="card-title">Revisión de Información y Confirmación de Datos</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Revise los valores extraídos del PDF y complete únicamente aquellos no informados o ambiguos. Cada campo indica su origen y estado de validación.
+        </p>
+
+        <!-- GROUP 1: DATOS EXTRAIDOS DEL REPORTE -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> Revisa los datos de tu reporte
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Nacimiento:</label>
+              <span id="badge-fecha-nac" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-nac" onchange="onFieldUserChange('fecha-nac')">
+            <div class="date-hint-es" id="rev-fecha-nac-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Estado de Afiliación:</label>
+              <span id="badge-estado-afil" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <select class="form-control" id="rev-estado-afil" onchange="onFieldUserChange('estado-afil')">
+              <option value="ACTIVO">Activo Cotizante</option>
+              <option value="INACTIVO">Inactivo</option>
+              <option value="PENSIONADO">Pensionado</option>
+              <option value="DESCONOCIDO">Desconocido</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Afiliación Informada:</label>
+              <span id="badge-fecha-afil" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-afil" onchange="onFieldUserChange('fecha-afil')">
+            <div class="date-hint-es" id="rev-fecha-afil-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Actualización del Reporte (Documental):</label>
+              <span id="badge-fecha-corte" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-corte" onchange="onFieldUserChange('fecha-corte')">
+            <div class="date-hint-es" id="rev-fecha-corte-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Fecha de Expedición del Certificado:</label>
+              <span id="badge-fecha-expedicion" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-fecha-expedicion" onchange="onFieldUserChange('fecha-expedicion')">
+            <div class="date-hint-es" id="rev-fecha-expedicion-es"></div>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Total Semanas Reconocidas en Resumen:</label>
+              <span id="badge-semanas-resumen" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="number" step="0.01" class="form-control" id="rev-semanas-resumen" onchange="onFieldUserChange('semanas-resumen')">
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Último Período Cotizado Detectado:</label>
+              <span id="badge-ultimo-periodo" class="badge-extracted">Extraído del PDF</span>
+            </div>
+            <input type="date" class="form-control" id="rev-ultimo-periodo" onchange="onFieldUserChange('ultimo-periodo')">
+            <div class="date-hint-es" id="rev-ultimo-periodo-es"></div>
+          </div>
+        </div>
+
+        <!-- GROUP 2: DATOS QUE DEBEN PREGUNTARSE / VERIFICARSE -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #b45309; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️</span> Completa la información que falta o requiere verificación
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Por mandato legal, la categoría pensional no se deduce del nombre o cédula. Indique su categoría y el estado de aportes posteriores o faltantes.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="field-header">
+              <label style="color: #b45309; font-weight: 700;">Categoría para Requisitos Pensionales (Sexo Jurídico): *</label>
+              <span id="badge-sexo" class="badge-notfound">No encontrado</span>
+            </div>
+            <select class="form-control" id="rev-sexo" onchange="onFieldUserChange('sexo')">
+              <option value="">-- Seleccione categoría pensional --</option>
+              <option value="FEMENINO">Femenino (Mujer: 57 años / 750 semanas C-264)</option>
+              <option value="MASCULINO">Masculino (Hombre: 62 años / 900 semanas C-264)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>Semanas de Alto Riesgo (Dec. 2090/2003):</label>
+              <span id="badge-alto-riesgo" class="badge-notfound">No informado</span>
+            </div>
+            <input type="number" step="0.01" class="form-control" id="rev-alto-riesgo" placeholder="0 si no cotizó alto riesgo" onchange="onFieldUserChange('alto-riesgo')">
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>¿Aportes posteriores a la fecha del reporte?:</label>
+              <span id="badge-aportes-posteriores" class="badge-declared">Declaración</span>
+            </div>
+            <select class="form-control" id="rev-aportes-posteriores" onchange="onFieldUserChange('aportes-posteriores')">
+              <option value="SIN_APORTES">No hubo aportes posteriores (historia al día)</option>
+              <option value="CON_APORTES">Hubo aportes y se aportará información o soporte</option>
+              <option value="DESCONOCIDO">Se desconoce si hubo aportes</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="field-header">
+              <label>¿Existen períodos o semanas no certificadas?:</label>
+              <span id="badge-faltantes" class="badge-declared">Declaración</span>
+            </div>
+            <select class="form-control" id="rev-faltantes" onchange="onFieldUserChange('faltantes')">
+              <option value="false">No, no se identifican períodos faltantes</option>
+              <option value="true">Sí, hay períodos laborados por reclamar</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(1)">← Cargar otro PDF</button>
+          <button class="btn btn-primary" id="btn-to-review-periods" onclick="validateAndGoToReviewPeriods()">Continuar a Revisar Períodos y Semanas →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: REVISAR PERIODOS Y SEMANAS (NUEVA PANTALLA DEDICADA) -->
+    <div class="step-panel" id="step-panel-3" style="display:none;">
+      <div class="card">
+        <div class="card-title">Revisar Períodos y Semanas de Cotización</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Inspeccione y concilie los períodos de cotización extraídos del reporte oficial antes de proceder con la evaluación de transición.
+          Puede verificar el resumen por aportante, editar períodos con su motivo, excluir aportes o declarar períodos omitidos.
+        </p>
+
+        <!-- RESUMEN DE CONCILIACIÓN DE SEMANAS (4 KPIS) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+          <span>⚖️</span> Conciliación de Semanas Cotizadas
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Resumen PDF</div>
+            <div class="kpi-val" id="recon-kpi-pdf">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Certificadas en resumen</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Detalle Recalculadas</div>
+            <div class="kpi-val" id="recon-kpi-detalle">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Días acreditados según el tipo de período</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Aportes Declarados</div>
+            <div class="kpi-val" id="recon-kpi-declaradas">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Agregados por el usuario</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Totales Activas</div>
+            <div class="kpi-val" id="recon-kpi-activas" style="color: var(--primary);">0.00</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Base para evaluar transición</div>
+          </div>
+        </div>
+
+        <div id="recon-discrepancia-banner" style="margin-bottom: 1.25rem;"></div>
+
+        <!-- TABLA 1: RESUMEN POR EMPLEADOR (DOCUMENTAL) -->
+        <div id="section-resumen-empleador" style="display:none; margin-top: 1.5rem; margin-bottom: 2rem;">
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.35rem; color: var(--text); display: flex; align-items: center; justify-content: space-between;">
+            <span>🏢 Tabla 1: Resumen Documental de Semanas por Empleador</span>
+            <span class="badge badge-info" style="font-size: 0.75rem;">Consolidado Oficial por Aportante</span>
+          </div>
+          <div class="alert alert-info" style="font-size: 0.82rem; margin-bottom: 0.75rem; line-height: 1.5;">
+            ℹ️ <strong>Criterio Actuarial:</strong> El "último salario" reportado en este resumen corresponde exclusivamente al último ingreso registrado ante cada aportante y <strong>NO se proyecta como IBC mensual para todos los períodos, ni se suma como aportes independientes al detalle</strong> para evitar duplicaciones.
+          </div>
+          <div class="table-container">
+            <table id="table-resumen-empleadores">
+              <thead>
+                <tr>
+                  <th>Aportante / Razón Social</th>
+                  <th>NIT / Identificación</th>
+                  <th>Desde</th>
+                  <th>Hasta</th>
+                  <th>Último Salario</th>
+                  <th>Semanas</th>
+                  <th>Licencias</th>
+                  <th>Simultaneidad</th>
+                  <th>Total Semanas</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TABLA 2: DETALLE DE COTIZACIONES (EDITABLE CON PROCEDENCIA) -->
+        <div style="font-weight: 700; font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.35rem; color: var(--text); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <span>📋 Tabla 2: Detalle de Períodos de Cotización</span>
+          <span class="badge badge-purple" style="font-size: 0.75rem;">Auditable fila a fila</span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Relación mensual de aportes. Cada registro conserva su página de origen, estado de validación y procedencia. Puede editar fechas/IBC con motivo obligatorio, restaurar originales o excluir del cálculo.
+        </p>
+
+        <!-- Filtros y buscador del detalle -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 0.75rem;">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <button class="btn btn-outline btn-sm filter-btn active" id="filter-btn-all" onclick="filterDetailRecords('ALL')">Todos (<span id="count-filter-all">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-valid" onclick="filterDetailRecords('VALID')">Válidos (<span id="count-filter-valid">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-corrected" onclick="filterDetailRecords('CORRECTED')">Corregidos (<span id="count-filter-corrected">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-excluded" onclick="filterDetailRecords('EXCLUDED')">Excluidos (<span id="count-filter-excluded">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-declared" onclick="filterDetailRecords('DECLARED')">Declarados (<span id="count-filter-declared">0</span>)</button>
+            <button class="btn btn-outline btn-sm filter-btn" id="filter-btn-warnings" onclick="filterDetailRecords('WARNINGS')">Con Advertencia (<span id="count-filter-warnings">0</span>)</button>
+          </div>
+          <div style="min-width: 200px;">
+            <input type="text" id="search-detail-records" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;" placeholder="Buscar aportante, año o período..." oninput="filterDetailRecords()">
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="table-registros">
+            <thead>
+              <tr>
+                <th style="width: 50px;">Pág.</th>
+                <th>Período</th>
+                <th>Días Rep.</th>
+                <th>Días Rec.</th>
+                <th>IBC (COP)</th>
+                <th>Aportante / Empleador</th>
+                <th>Procedencia</th>
+                <th>Estado</th>
+                <th style="text-align: center; min-width: 170px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- FORMULARIO DECLARAR PERÍODO ADICIONAL -->
+        <div class="card" style="background: #fffbeb; border: 1px dashed #f59e0b; padding: 1rem; margin-top: 1.5rem; margin-bottom: 1rem;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>➕ Declarar Nuevo Período de Cotización</span>
+            <span class="badge badge-warning" style="font-size: 0.7rem;">DECLARACION_USUARIO</span>
+          </div>
+          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Fecha Inicio:</label>
+              <input type="date" class="form-control" id="decl-inicio" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Fecha Fin:</label>
+              <input type="date" class="form-control" id="decl-fin" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Días Cotizados:</label>
+              <input type="number" class="form-control" id="decl-dias" placeholder="30" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">IBC Mensual (COP):</label>
+              <input type="number" class="form-control" id="decl-ibc" placeholder="Ej. 2000000" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.75rem;">Aportante / Empleador:</label>
+              <input type="text" class="form-control" id="decl-aportante" placeholder="Razón social o concepto" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label style="font-size: 0.75rem;">Motivo de la Declaración (Obligatorio):</label>
+              <input type="text" class="form-control" id="decl-motivo" placeholder="Ej. Período laborado no registrado en el extracto" style="font-size: 0.8rem; padding: 0.35rem;">
+            </div>
+          </div>
+          <div style="margin-top: 0.5rem; text-align: right;">
+            <button id="btn-add-declared-period" class="btn btn-sm btn-primary" onclick="addDeclaredPeriod()">+ Agregar Período Declarado</button>
+          </div>
+        </div>
+
+        <!-- PANEL DE BLOQUEOS Y ERRORES DE VALIDACIÓN -->
+        <div id="review-validation-errors-box" style="display:none; margin-top: 1rem;" class="alert alert-danger"></div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(2)">← Volver a Datos del Afiliado</button>
+          <button class="btn btn-primary" id="btn-confirm-periods-to-transition" onclick="confirmPeriodsAndEvaluateTransition()">Confirmar Períodos y Evaluar Transición →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: EVALUACION DE TRANSICION -->
+    <div class="step-panel" id="step-panel-4" style="display:none;">
+      <div class="card">
+        <div class="card-title">Dictamen de Conservación de Régimen de Transición (Ley 100 de 1993)</div>
+        <div id="transition-result-banner"></div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-lbl">Umbral Legal Exigido</div>
+            <div class="kpi-val" id="trans-kpi-umbral">0 sem</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Ley 2381 / Sentencia C-264</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Semanas Acreditadas al Corte</div>
+            <div class="kpi-val" id="trans-kpi-acreditadas">0 sem</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Documental verificable</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Fecha de Corte Aplicada</div>
+            <div class="kpi-val" style="font-size: 1.15rem;" id="trans-kpi-corte">2027-04-01</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Sentencia C-264 de 2026</div>
+          </div>
+        </div>
+
+        <div class="alert alert-info" id="trans-legal-notes"></div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(3)">← Revisar Períodos y Semanas</button>
+          <button class="btn btn-primary" id="btn-to-step-4" style="display:none;" onclick="goToStep(5)">Configurar Escenarios de Proyección →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5: CONFIGURACION DE ESCENARIOS MULTIPLES -->
+    <div class="step-panel" id="step-panel-5" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <span>Configuración de Escenarios de Proyección</span>
+          <button class="btn btn-outline btn-sm" onclick="addScenarioCard()">➕ Agregar Escenario</button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Defina supuestos de ingresos para el tiempo restante hasta la edad legal ordinaria. Todos los escenarios terminan obligatoriamente al alcanzar la edad legal de retiro (57 años mujeres / 62 años hombres). Puede comparar múltiples escenarios simultáneamente.
+        </p>
+
+        <div id="escenarios-container"></div>
+
+        <div class="nav-buttons">
+          <button class="btn btn-outline" onclick="goToStep(4)">← Volver a Transición</button>
+          <button id="btn-run-simulation" class="btn btn-primary" onclick="runSimulation()">Ejecutar Simulación y Ver Comparativa →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 6: RESULTADOS Y COMPARATIVA -->
+    <div class="step-panel" id="step-panel-6" style="display:none;">
+      <div id="simulation-output"></div>
+
+      <div class="nav-buttons" style="margin-top: 2rem;">
+        <button class="btn btn-outline" onclick="goToStep(5)">← Modificar Escenarios</button>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn btn-secondary" onclick="openAuditModal()">🔍 Ver Auditoría de Cálculos</button>
+          <button class="btn btn-secondary" onclick="exportResultsJSON()">💾 Exportar JSON</button>
+          <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL: EDIT RECORD -->
+  <div class="modal" id="edit-record-modal">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--primary);">✏️ Modificar Registro de Cotización</h3>
+        <button class="modal-close" onclick="closeEditRecordModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Al modificar un registro, el cambio queda etiquetado como <strong>CORRECCION_MANUAL</strong> y no se presenta como certificación oficial de Colpensiones. El valor original se conserva inmutable en la auditoría.
+      </p>
+
+      <!-- Original values comparison box -->
+      <div style="background: #f1f5f9; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem;">
+        <strong style="color: var(--text-muted);">Valores Originales Extraídos:</strong>
+        <div id="edit-modal-original-summary" style="margin-top: 4px; color: #334155;"></div>
+      </div>
+
+      <input type="hidden" id="edit-modal-record-id">
+
+      <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+        <div class="form-group">
+          <label>Fecha Inicio: *</label>
+          <input type="date" class="form-control" id="edit-modal-inicio" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Fecha Fin: *</label>
+          <input type="date" class="form-control" id="edit-modal-fin" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Días Cotizados: *</label>
+          <input type="number" class="form-control" id="edit-modal-dias" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>Días Reportados:</label>
+          <input type="number" class="form-control" id="edit-modal-dias-rep" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group">
+          <label>IBC (COP): *</label>
+          <input type="number" class="form-control" id="edit-modal-ibc" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Aportante / Razón Social: *</label>
+          <input type="text" class="form-control" id="edit-modal-aportante" oninput="validateEditModalInputs()">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label style="color: #b45309; font-weight: 700;">Motivo de la Corrección: *</label>
+          <input type="text" class="form-control" id="edit-modal-motivo" placeholder="Indique la justificación (ej. Corrección de fecha según certificado de empresa)" oninput="validateEditModalInputs()">
+        </div>
+      </div>
+
+      <!-- Real-time validation warning inside modal -->
+      <div id="edit-modal-error-box" style="display:none; margin-top: 0.75rem;" class="alert alert-danger"></div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.25rem;">
+        <button class="btn btn-outline" onclick="closeEditRecordModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-record-edit" onclick="saveRecordEdit()">Guardar Corrección</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXCLUDE RECORD -->
+  <div class="modal" id="exclude-record-modal">
+    <div class="modal-box" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--danger);">🚫 Excluir Período del Cálculo</h3>
+        <button class="modal-close" onclick="closeExcludeRecordModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        El registro seleccionado no sumará días ni semanas para la evaluación de transición ni afectará el cálculo del IBL y la mesada.
+      </p>
+
+      <div id="exclude-modal-record-info" style="background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.82rem;"></div>
+
+      <input type="hidden" id="exclude-modal-record-id">
+
+      <div class="form-group">
+        <label style="color: #b45309; font-weight: 700;">Motivo de la Exclusión: *</label>
+        <textarea id="exclude-modal-motivo" class="form-control" rows="3" placeholder="Ej. Aporte superpuesto en régimen privado o no reconocido judicialmente..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.25rem;">
+        <button class="btn btn-outline" onclick="closeExcludeRecordModal()">Cancelar</button>
+        <button class="btn btn-primary" style="background: var(--danger); border-color: var(--danger);" onclick="confirmExcludeRecord()">Confirmar Exclusión</button>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- MODAL: Password Input -->
+  <div class="modal" id="pwd-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🔒 Archivo Protegido con Contraseña</h3>
+        <button class="modal-close" onclick="closePwdModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Este PDF requiere contraseña para abrirse. Ingrésela localmente; nunca será guardada en logs ni transmitida fuera de su equipo.
+      </p>
+      <div class="form-group">
+        <label>Contraseña del PDF:</label>
+        <input type="password" id="pdf-password-input" class="form-control" placeholder="Ingrese la contraseña">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+        <button class="btn btn-outline" onclick="closePwdModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitPassword()">Desbloquear Documento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Legal Catalog -->
+  <div class="modal" id="catalog-modal">
+    <div class="modal-box" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3>📜 Catálogo de Reglas Jurídicas y Jurisprudencia</h3>
+        <button class="modal-close" onclick="closeCatalogModal()">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Normas legales, sentencias de la Corte Constitucional y la Corte Suprema de Justicia aplicadas con fecha de corte de auditoría al <strong>27 de septiembre de 2026</strong>.
+      </p>
+      <div id="catalog-content">Cargando catálogo...</div>
+    </div>
+  </div>
+
+  <!-- MODAL: Auditoría Detallada Paso a Paso -->
+  <div class="modal" id="audit-modal">
+    <div class="modal-box" style="max-width: 950px;">
+      <div class="modal-header">
+        <div>
+          <h3>🔍 Auditoría de la Simulación y Trazabilidad Paso a Paso</h3>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+            Inspección transparente: qué extrajo del PDF, qué transformó, qué calculó y por qué un escenario produjo determinado resultado o quedó bloqueado.
+          </p>
+        </div>
+        <button class="modal-close" onclick="closeAuditModal()">&times;</button>
+      </div>
+
+      <!-- Action & Filter Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem; background: #f8fafc; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border);">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-save-audit-local" onclick="saveAuditLocally()">💾 Guardar en Disco</button>
+          <button class="btn btn-outline btn-sm" onclick="exportFullAuditJSON()">📦 Exportar Auditoría (.json)</button>
+          <button class="btn btn-outline btn-sm" onclick="downloadAuditReportMD()">📄 Reporte (.md)</button>
+        </div>
+        <div id="audit-disk-status" style="font-size: 0.8rem; color: var(--text-muted);">
+          Memoria local (privacidad garantizada)
+        </div>
+      </div>
+
+      <!-- Filter Controls -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 1rem;">
+        <div class="form-group">
+          <label style="font-size: 0.75rem;">Filtro por Paso:</label>
+          <select id="audit-filter-step" class="form-control" style="font-size: 0.8rem; padding: 0.4rem;" onchange="renderAuditContent()">
+            <option value="ALL">Todos los pasos</option>
+            <option value="EXTRACCION">1. Qué extrajo del PDF</option>
+            <option value="TRANSFORMACION">2. Qué transformó</option>
+            <option value="CALCULO">3. Qué calculó</option>
+            <option value="DIAGNOSTICO">4. Diagnóstico y Bloqueos</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-size: 0.75rem;">Filtro por Escenario:</label>
+          <select id="audit-filter-scenario" class="form-control" style="font-size: 0.8rem; padding: 0.4rem;" onchange="renderAuditContent()">
+            <option value="ALL">Todos los escenarios</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-size: 0.75rem;">Buscar texto:</label>
+          <input type="text" id="audit-search-text" class="form-control" style="font-size: 0.8rem; padding: 0.4rem;" placeholder="Filtrar por palabra..." oninput="renderAuditContent()">
+        </div>
+      </div>
+
+      <!-- Audit Body Container -->
+      <div id="audit-content-area" style="min-height: 250px;">
+        <div class="alert alert-info">Cargando datos de auditoría...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESET SESSION MODAL (Hallazgo 7) -->
+  <div class="modal" id="reset-session-modal">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--danger);">🗑️ Reiniciar Sesión Local</h3>
+        <button class="modal-close" onclick="closeResetSessionModal()">&times;</button>
+      </div>
+      <div style="font-size: 0.9rem; margin-bottom: 1.25rem;">
+        <p>¿Desea reiniciar la sesión? Se purgarán de la memoria activa todos los datos del afiliado, el formulario de revisión y las proyecciones en pantalla.</p>
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-top: 1rem;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+            <input type="checkbox" id="chk-delete-disk-audit" style="margin-top: 3px;">
+            <span><strong>Eliminar también la auditoría guardada en este equipo</strong> (elimina archivos persistidos en disco).</span>
+          </label>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn btn-outline" onclick="closeResetSessionModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirm-reset-session" style="background: var(--danger); border-color: var(--danger);" onclick="executeResetSession()">Confirmar y Borrar Sesión</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // XSS sanitization utility
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // State
+    let currentStep = 1;
+    let laborHistory = null;
+    let lastUploadedFile = null;
+    let currentExecutionId = null;
+    let simulationResults = [];
+    let currentAuditData = null;
+    let originalExtractedHistory = null;
+    const scenarioBaseSmlmv = Number("__SCENARIO_BASE_SMLMV__");
+    let scenarioList = [
+      { id: "esc_base", nombre: "Escenario 1 (Base)", ibc: scenarioBaseSmlmv, crec: 5.0, inf: 4.0, smlmv: 5.5, pausas: [] },
+      { id: "esc_opt", nombre: "Escenario 2 (Optimista)", ibc: 2 * scenarioBaseSmlmv, crec: 6.0, inf: 4.0, smlmv: 5.5, pausas: [] }
+    ];
+
+    // Stepper navigation (6 steps)
+    function goToStep(step) {
+      if (step > 2 && !laborHistory) {
+        alert("Por favor cargue primero un archivo de historia laboral.");
+        return;
+      }
+      currentStep = step;
+      document.querySelectorAll('.step-panel').forEach(p => p.style.display = 'none');
+      const panel = document.getElementById(`step-panel-${step}`);
+      if (panel) panel.style.display = 'block';
+
+      for (let i = 1; i <= 6; i++) {
+        const item = document.getElementById(`step-nav-${i}`);
+        if (item) {
+          item.classList.remove('active', 'completed');
+          if (i < step) item.classList.add('completed');
+          if (i === step) item.classList.add('active');
+        }
+      }
+      if (step === 3) {
+        updateReconciliationView();
+        renderDetailTables();
+      } else if (step === 5) {
+        renderScenarioCards();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Register field corrections in audit trail
+    async function registerFieldCorrection(fieldName, originalVal, newVal, reason, provenance) {
+      if (!currentExecutionId) return;
+      try {
+        await fetch('/api/audit/correction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            execution_id: currentExecutionId,
+            target_field: fieldName,
+            original_value: originalVal,
+            corrected_value: newVal,
+            reason: reason || "Modificación manual en formulario de revisión",
+            provenance: provenance || "DECLARACION_USUARIO"
+          })
+        });
+      } catch (err) {
+        console.warn("No se pudo registrar la corrección en auditoría:", err);
+      }
+    }
+
+    // Invalidate downstream calculations when labor history or records change
+    function invalidateDownstreamCalculations() {
+      if (laborHistory) {
+        laborHistory.revision_version = (laborHistory.revision_version || 1) + 1;
+        laborHistory.revision_id = 'rev_' + Date.now();
+      }
+      // Reset transition step UI
+      const banner = document.getElementById('transition-result-banner');
+      if (banner) {
+        banner.className = '';
+        banner.innerHTML = '';
+      }
+      const btnToStep4 = document.getElementById('btn-to-step-4');
+      if (btnToStep4) btnToStep4.style.display = 'none';
+
+      // Reset simulations
+      simulationResults = [];
+      const simOut = document.getElementById('simulation-output');
+      if (simOut) simOut.innerHTML = '';
+    }
+
+    // Drag and drop handlers
+    const dropzone = document.getElementById('dropzone');
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('dragover'); });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        processUploadedFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleFileSelect(e) {
+      if (e.target.files.length > 0) {
+        processUploadedFile(e.target.files[0]);
+      }
+    }
+
+    async function processUploadedFile(file, password = null) {
+      lastUploadedFile = file;
+      const statusDiv = document.getElementById('upload-status');
+      statusDiv.style.display = 'block';
+      statusDiv.innerHTML = '<div class="alert alert-info">Procesando historia laboral de manera local...</div>';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      if (password) formData.append('password', password);
+
+      try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const res = await resp.json();
+
+        if (resp.status === 401 && res.requires_password) {
+          statusDiv.innerHTML = '<div class="alert alert-warning">El documento está protegido con contraseña.</div>';
+          document.getElementById('pwd-modal').classList.add('active');
+          return;
+        }
+
+        if (!resp.ok || !res.success) {
+          statusDiv.innerHTML = `<div class="alert alert-danger">${res.error_message || "Error al procesar el archivo."}</div>`;
+          return;
+        }
+
+        laborHistory = res.data;
+        // Ensure record_id on all records
+        (laborHistory.registros || []).forEach((r, idx) => {
+          if (!r.record_id) r.record_id = `rec_${idx}_${Date.now()}`;
+          if (r.excluido_del_calculo === undefined) r.excluido_del_calculo = false;
+          if (!r.estado_validacion) r.estado_validacion = 'VALIDO';
+        });
+        if (!laborHistory.original_registros) {
+          laborHistory.original_registros = JSON.parse(JSON.stringify(laborHistory.registros || []));
+        }
+
+        currentExecutionId = res.report.execution_id;
+        statusDiv.innerHTML = `<div class="alert alert-success">Documento procesado con éxito. Se identificaron ${res.report.records_extracted} registros de cotización en ${res.report.pages_processed} páginas.</div>`;
+
+        populateReviewScreen(laborHistory);
+        setTimeout(() => goToStep(2), 500);
+
+      } catch (err) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Error local de conexión: ${err.message}</div>`;
+      }
+    }
+
+    function submitPassword() {
+      const pwd = document.getElementById('pdf-password-input').value;
+      if (!pwd) return;
+      closePwdModal();
+      if (lastUploadedFile) {
+        processUploadedFile(lastUploadedFile, pwd);
+      }
+    }
+
+    function closePwdModal() {
+      document.getElementById('pwd-modal').classList.remove('active');
+      document.getElementById('pdf-password-input').value = '';
+    }
+
+    function formatDateSpanish(isoStr) {
+      if (!isoStr) return '';
+      const parts = isoStr.split('-');
+      if (parts.length !== 3) return isoStr;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const months = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+      ];
+      if (m < 1 || m > 12) return isoStr;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d)} de ${months[m - 1]} de ${y} (${pad(d)}/${pad(m)}/${y})`;
+    }
+
+    function setFieldBadge(fieldId, status, tooltip) {
+      const badgeEl = document.getElementById('badge-' + fieldId);
+      if (!badgeEl) return;
+      badgeEl.title = tooltip || '';
+      if (status === 'EXTRAIDO_PDF') {
+        badgeEl.className = 'badge-extracted';
+        badgeEl.textContent = 'Extraído del PDF';
+      } else if (status === 'NO_ENCONTRADO') {
+        badgeEl.className = 'badge-notfound';
+        badgeEl.textContent = 'No encontrado';
+      } else if (status === 'REQUIERE_REVISION') {
+        badgeEl.className = 'badge-review';
+        badgeEl.textContent = 'Requiere revisión';
+      } else if (status === 'CORREGIDO_USUARIO') {
+        badgeEl.className = 'badge-user';
+        badgeEl.textContent = 'Corregido por el usuario';
+      } else if (status === 'DECLARADO_USUARIO') {
+        badgeEl.className = 'badge-declared';
+        badgeEl.textContent = 'Declarado por el usuario';
+      }
+    }
+
+    function onFieldUserChange(fieldId) {
+      setFieldBadge(fieldId, 'CORREGIDO_USUARIO', 'Modificado manualmente por el usuario');
+      invalidateDownstreamCalculations();
+      if (fieldId === 'fecha-nac') {
+        document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-nac').value);
+      } else if (fieldId === 'fecha-corte') {
+        document.getElementById('rev-fecha-corte-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-corte').value);
+      } else if (fieldId === 'fecha-afil') {
+        document.getElementById('rev-fecha-afil-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-afil').value);
+      } else if (fieldId === 'fecha-expedicion') {
+        document.getElementById('rev-fecha-expedicion-es').innerText = formatDateSpanish(document.getElementById('rev-fecha-expedicion').value);
+      } else if (fieldId === 'ultimo-periodo') {
+        document.getElementById('rev-ultimo-periodo-es').innerText = formatDateSpanish(document.getElementById('rev-ultimo-periodo').value);
+      }
+    }
+
+    // SAFE DOM population to eliminate XSS (Finding 2.9)
+    function populateReviewScreen(h) {
+      originalExtractedHistory = JSON.parse(JSON.stringify(h));
+
+      document.getElementById('rev-fecha-nac').value = h.fecha_nacimiento || '';
+      document.getElementById('rev-fecha-nac-es').innerText = formatDateSpanish(h.fecha_nacimiento);
+
+      document.getElementById('rev-estado-afil').value = h.estado_afiliacion || 'ACTIVO';
+
+      document.getElementById('rev-fecha-afil').value = h.fecha_afiliacion_colpensiones || '';
+      document.getElementById('rev-fecha-afil-es').innerText = formatDateSpanish(h.fecha_afiliacion_colpensiones);
+
+      document.getElementById('rev-fecha-corte').value = h.fecha_actualizacion_reporte || '';
+      document.getElementById('rev-fecha-corte-es').innerText = formatDateSpanish(h.fecha_actualizacion_reporte);
+
+      document.getElementById('rev-fecha-expedicion').value = h.fecha_expedicion_reporte || '';
+      document.getElementById('rev-fecha-expedicion-es').innerText = formatDateSpanish(h.fecha_expedicion_reporte);
+
+      document.getElementById('rev-semanas-resumen').value = h.semanas_resumen_colpensiones || 0;
+
+      document.getElementById('rev-ultimo-periodo').value = h.ultimo_periodo_cotizado || '';
+      document.getElementById('rev-ultimo-periodo-es').innerText = formatDateSpanish(h.ultimo_periodo_cotizado);
+
+      // Section 2: Missing or user-verified fields
+      document.getElementById('rev-sexo').value = h.sexo || '';
+
+      if (h.semanas_alto_riesgo !== null && h.semanas_alto_riesgo !== undefined) {
+        document.getElementById('rev-alto-riesgo').value = h.semanas_alto_riesgo;
+        setFieldBadge('alto-riesgo', 'EXTRAIDO_PDF', 'Informado en el reporte');
+      } else {
+        document.getElementById('rev-alto-riesgo').value = '';
+        setFieldBadge('alto-riesgo', 'NO_ENCONTRADO', 'No informado en el reporte. Ingrese 0 si no cotizó alto riesgo.');
+      }
+
+      document.getElementById('rev-aportes-posteriores').value = h.aportes_posteriores_estado || 'SIN_APORTES';
+      document.getElementById('rev-faltantes').value = h.periodos_desconocidos_o_faltantes ? "true" : "false";
+
+      // Apply initial badges based on presence
+      setFieldBadge('fecha-nac', h.fecha_nacimiento ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('estado-afil', h.estado_afiliacion !== 'DESCONOCIDO' ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-afil', h.fecha_afiliacion_colpensiones ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-corte', h.fecha_actualizacion_reporte ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('fecha-expedicion', h.fecha_expedicion_reporte ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('semanas-resumen', h.semanas_resumen_colpensiones > 0 ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('ultimo-periodo', h.ultimo_periodo_cotizado ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+      setFieldBadge('sexo', h.sexo ? 'EXTRAIDO_PDF' : 'NO_ENCONTRADO');
+    }
+
+    async function validateAndGoToReviewPeriods() {
+      const fNac = document.getElementById('rev-fecha-nac').value;
+      const sexo = document.getElementById('rev-sexo').value;
+      if (!fNac) {
+        alert("La fecha de nacimiento es obligatoria para verificar la edad legal y el régimen de transición.");
+        return;
+      }
+      if (!sexo) {
+        alert("Por favor seleccione la Categoría para Requisitos Pensionales (Femenino o Masculino). Por mandato legal no puede inferirse automáticamente.");
+        return;
+      }
+
+      const altoRiesgoInput = document.getElementById('rev-alto-riesgo').value;
+      const arVal = altoRiesgoInput === "" ? null : parseFloat(altoRiesgoInput) || 0;
+
+      laborHistory.fecha_nacimiento = fNac;
+      laborHistory.sexo = sexo;
+      laborHistory.estado_afiliacion = document.getElementById('rev-estado-afil').value;
+      laborHistory.fecha_afiliacion_colpensiones = document.getElementById('rev-fecha-afil').value || null;
+      laborHistory.fecha_actualizacion_reporte = document.getElementById('rev-fecha-corte').value || null;
+      laborHistory.fecha_expedicion_reporte = document.getElementById('rev-fecha-expedicion').value || null;
+      laborHistory.semanas_resumen_colpensiones = parseFloat(document.getElementById('rev-semanas-resumen').value) || 0;
+      laborHistory.ultimo_periodo_cotizado = document.getElementById('rev-ultimo-periodo').value || null;
+      laborHistory.semanas_alto_riesgo = arVal;
+      laborHistory.aportes_posteriores_estado = document.getElementById('rev-aportes-posteriores').value;
+      laborHistory.periodos_desconocidos_o_faltantes = document.getElementById('rev-faltantes').value === "true";
+
+      // Register general field changes in audit if changed
+      if (currentExecutionId && originalExtractedHistory) {
+        const fieldsToCompare = [
+          { field: 'fecha_nacimiento', label: 'Fecha de Nacimiento' },
+          { field: 'sexo', label: 'Categoría para Requisitos Pensionales' },
+          { field: 'estado_afiliacion', label: 'Estado de Afiliación' },
+          { field: 'fecha_afiliacion_colpensiones', label: 'Fecha de Afiliación' },
+          { field: 'fecha_actualizacion_reporte', label: 'Fecha de Actualización' },
+          { field: 'fecha_expedicion_reporte', label: 'Fecha de Expedición' },
+          { field: 'semanas_resumen_colpensiones', label: 'Total Semanas en Resumen' },
+          { field: 'ultimo_periodo_cotizado', label: 'Último Período Cotizado' },
+          { field: 'semanas_alto_riesgo', label: 'Semanas de Alto Riesgo' },
+          { field: 'aportes_posteriores_estado', label: 'Aportes Posteriores' },
+          { field: 'periodos_desconocidos_o_faltantes', label: 'Períodos Desconocidos o Faltantes' }
+        ];
+        for (const item of fieldsToCompare) {
+          const origVal = originalExtractedHistory[item.field];
+          const newVal = laborHistory[item.field];
+          if (String(origVal) !== String(newVal) && !(origVal === null && (newVal === '' || newVal === null))) {
+            await registerFieldCorrection(
+              item.field,
+              origVal,
+              newVal,
+              `Modificación en datos de afiliado: ${item.label}`,
+              "DECLARACION_USUARIO"
+            );
+          }
+        }
+      }
+
+      goToStep(3);
+    }
+
+    // Detail filtering state
+    let activeDetailFilter = 'ALL';
+
+    function filterDetailRecords(filterType) {
+      if (filterType) {
+        activeDetailFilter = filterType;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById(`filter-btn-${filterType.toLowerCase()}`);
+        if (btn) btn.classList.add('active');
+      }
+      renderDetailTables();
+    }
+
+    function renderDetailTables() {
+      if (!laborHistory) return;
+
+      // 1. Render Summary Table (Table 1)
+      const resSec = document.getElementById('section-resumen-empleador');
+      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+      if (resTbody) {
+        resTbody.innerHTML = '';
+        const summaryList = laborHistory.resumen_empleadores || [];
+        if (summaryList.length > 0) {
+          if (resSec) resSec.style.display = 'block';
+          summaryList.forEach(r => {
+            const tr = document.createElement('tr');
+            const tdNom = document.createElement('td'); tdNom.textContent = r.nombre_aportante || 'EMPLEADOR';
+            const tdNit = document.createElement('td'); tdNit.textContent = r.nit || '-';
+            const tdIni = document.createElement('td'); tdIni.textContent = r.periodo_inicio || '';
+            const tdFin = document.createElement('td'); tdFin.textContent = r.periodo_fin || '';
+            const tdSal = document.createElement('td'); tdSal.textContent = '$' + Number(r.ultimo_salario || 0).toLocaleString('es-CO');
+            const tdSem = document.createElement('td'); tdSem.textContent = Number(r.semanas || 0).toFixed(2);
+            const tdLic = document.createElement('td'); tdLic.textContent = Number(r.licencias || 0).toFixed(2);
+            const tdSim = document.createElement('td'); tdSim.textContent = Number(r.simultaneidad || 0).toFixed(2);
+            const tdTot = document.createElement('td'); tdTot.textContent = Number(r.total_semanas || 0).toFixed(2);
+            tdTot.style.fontWeight = '700';
+
+            tr.append(tdNom, tdNit, tdIni, tdFin, tdSal, tdSem, tdLic, tdSim, tdTot);
+            resTbody.appendChild(tr);
+          });
+        } else {
+          if (resSec) resSec.style.display = 'none';
+        }
+      }
+
+      // 2. Render Detail Table (Table 2)
+      const tbody = document.querySelector('#table-registros tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const allRecords = laborHistory.registros || [];
+      const searchText = (document.getElementById('search-detail-records')?.value || '').toLowerCase().trim();
+
+      // Counts for filter badges
+      let cAll = allRecords.length;
+      let cValid = 0;
+      let cCorrected = 0;
+      let cExcluded = 0;
+      let cDeclared = 0;
+      let cWarnings = 0;
+
+      allRecords.forEach(r => {
+        if (r.excluido_del_calculo) cExcluded++;
+        else if (r.origen === 'DECLARACION_USUARIO') cDeclared++;
+        else if (r.origen === 'CORRECCION_MANUAL' || r.estado_validacion === 'CORREGIDO') cCorrected++;
+        else cValid++;
+
+        if (r.estado_validacion === 'ADVERTENCIA' || r.estado_validacion === 'INCONSISTENCIA') cWarnings++;
+      });
+
+      const setBadgeCount = (id, count) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = count;
+      };
+      setBadgeCount('count-filter-all', cAll);
+      setBadgeCount('count-filter-valid', cValid);
+      setBadgeCount('count-filter-corrected', cCorrected);
+      setBadgeCount('count-filter-excluded', cExcluded);
+      setBadgeCount('count-filter-declared', cDeclared);
+      setBadgeCount('count-filter-warnings', cWarnings);
+
+      // Filtered records
+      const filtered = allRecords.filter(r => {
+        if (activeDetailFilter === 'VALID' && (r.excluido_del_calculo || r.origen === 'CORRECCION_MANUAL' || r.origen === 'DECLARACION_USUARIO')) return false;
+        if (activeDetailFilter === 'CORRECTED' && (r.origen !== 'CORRECCION_MANUAL' && r.estado_validacion !== 'CORREGIDO')) return false;
+        if (activeDetailFilter === 'EXCLUDED' && !r.excluido_del_calculo) return false;
+        if (activeDetailFilter === 'DECLARED' && r.origen !== 'DECLARACION_USUARIO') return false;
+        if (activeDetailFilter === 'WARNINGS' && r.estado_validacion !== 'ADVERTENCIA' && r.estado_validacion !== 'INCONSISTENCIA') return false;
+
+        if (searchText) {
+          const matchAportante = (r.aportante || '').toLowerCase().includes(searchText);
+          const matchIni = (r.periodo_inicio || '').includes(searchText);
+          const matchFin = (r.periodo_fin || '').includes(searchText);
+          if (!matchAportante && !matchIni && !matchFin) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        const trEmpty = document.createElement('tr');
+        const tdEmpty = document.createElement('td');
+        tdEmpty.colSpan = 9;
+        tdEmpty.style.textAlign = 'center';
+        tdEmpty.style.padding = '1.5rem';
+        tdEmpty.style.color = 'var(--text-muted)';
+        tdEmpty.textContent = 'No hay registros que coincidan con el filtro seleccionado.';
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+        return;
+      }
+
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        if (r.excluido_del_calculo) {
+          tr.className = 'row-excluded';
+        }
+
+        // Pág
+        const tdPag = document.createElement('td');
+        tdPag.textContent = r.numero_pagina || '-';
+        tdPag.style.fontSize = '0.75rem';
+        tdPag.style.color = 'var(--text-muted)';
+
+        // Período
+        const tdPer = document.createElement('td');
+        tdPer.innerHTML = `<strong>${escapeHTML(r.periodo_inicio)}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">al ${escapeHTML(r.periodo_fin)}</span>`;
+
+        // Días Rep
+        const tdDiasRep = document.createElement('td');
+        tdDiasRep.textContent = r.dias_reportados !== undefined ? r.dias_reportados : r.dias_cotizados;
+
+        // Días Rec
+        const tdDiasRec = document.createElement('td');
+        tdDiasRec.innerHTML = `<strong>${r.dias_cotizados}</strong>`;
+
+        // IBC
+        const tdIbc = document.createElement('td');
+        tdIbc.textContent = '$' + Number(r.ibc || 0).toLocaleString('es-CO');
+
+        // Aportante
+        const tdAportante = document.createElement('td');
+        tdAportante.textContent = r.aportante || 'NO INFORMADO';
+
+        // Procedencia Badge
+        const tdOrigen = document.createElement('td');
+        const badgeOrigen = document.createElement('span');
+        if (r.origen === 'CORRECCION_MANUAL') {
+          badgeOrigen.className = 'badge badge-purple';
+          badgeOrigen.textContent = 'CORRECCIÓN';
+          badgeOrigen.title = r.motivo_correccion ? `Motivo: ${r.motivo_correccion}` : 'Corregido manualmente';
+        } else if (r.origen === 'DECLARACION_USUARIO') {
+          badgeOrigen.className = 'badge badge-warning';
+          badgeOrigen.textContent = 'DECLARADO';
+          badgeOrigen.title = r.motivo_correccion ? `Motivo: ${r.motivo_correccion}` : 'Declarado por el usuario';
+        } else {
+          badgeOrigen.className = 'badge badge-success';
+          badgeOrigen.textContent = 'PDF';
+          badgeOrigen.title = `Extraído del PDF oficial (Pág. ${r.numero_pagina || 1})`;
+        }
+        tdOrigen.appendChild(badgeOrigen);
+
+        // Estado Validación Badge
+        const tdEstado = document.createElement('td');
+        const badgeEstado = document.createElement('span');
+        if (r.excluido_del_calculo) {
+          badgeEstado.className = 'badge badge-danger';
+          badgeEstado.textContent = 'EXCLUIDO';
+          badgeEstado.title = r.motivo_exclusion || 'Excluido del cálculo';
+        } else if (r.estado_validacion === 'CORREGIDO') {
+          badgeEstado.className = 'badge badge-purple';
+          badgeEstado.textContent = 'CORREGIDO';
+        } else if (r.estado_validacion === 'ADVERTENCIA' || r.estado_validacion === 'INCONSISTENCIA') {
+          badgeEstado.className = 'badge badge-warning';
+          badgeEstado.textContent = 'ADVERTENCIA';
+        } else {
+          badgeEstado.className = 'badge badge-info';
+          badgeEstado.textContent = 'VÁLIDO';
+        }
+        tdEstado.appendChild(badgeEstado);
+
+        // Acciones
+        const tdAcciones = document.createElement('td');
+        tdAcciones.style.textAlign = 'center';
+        tdAcciones.style.whiteSpace = 'nowrap';
+
+        // Botón Editar
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn btn-outline btn-sm';
+        btnEdit.style.padding = '0.2rem 0.45rem';
+        btnEdit.style.fontSize = '0.75rem';
+        btnEdit.style.marginRight = '4px';
+        btnEdit.innerHTML = '✏️ Editar';
+        btnEdit.onclick = () => openEditRecordModal(r.record_id);
+        tdAcciones.appendChild(btnEdit);
+
+        // Botón Restaurar (si fue editado)
+        if (r.origen === 'CORRECCION_MANUAL' || r.valor_original) {
+          const btnRestore = document.createElement('button');
+          btnRestore.className = 'btn btn-outline btn-sm';
+          btnRestore.style.padding = '0.2rem 0.45rem';
+          btnRestore.style.fontSize = '0.75rem';
+          btnRestore.style.marginRight = '4px';
+          btnRestore.innerHTML = '🔄';
+          btnRestore.title = 'Restaurar valor original del PDF';
+          btnRestore.onclick = () => restoreRecordToOriginal(r.record_id);
+          tdAcciones.appendChild(btnRestore);
+        }
+
+        // Botón Excluir / Incluir
+        const btnToggleExcl = document.createElement('button');
+        btnToggleExcl.className = 'btn btn-outline btn-sm';
+        btnToggleExcl.style.padding = '0.2rem 0.45rem';
+        btnToggleExcl.style.fontSize = '0.75rem';
+        if (r.excluido_del_calculo) {
+          btnToggleExcl.style.color = 'var(--success)';
+          btnToggleExcl.innerHTML = '✔️ Incluir';
+          btnToggleExcl.onclick = () => restoreIncludedRecord(r.record_id);
+        } else {
+          btnToggleExcl.style.color = 'var(--danger)';
+          btnToggleExcl.innerHTML = '🚫 Excluir';
+          btnToggleExcl.onclick = () => openExcludeRecordModal(r.record_id);
+        }
+        tdAcciones.appendChild(btnToggleExcl);
+
+        tr.append(tdPag, tdPer, tdDiasRep, tdDiasRec, tdIbc, tdAportante, tdOrigen, tdEstado, tdAcciones);
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Modal Edit Record Logic
+    function openEditRecordModal(recordId) {
+      if (!laborHistory || !laborHistory.registros) return;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      document.getElementById('edit-modal-record-id').value = recordId;
+      document.getElementById('edit-modal-inicio').value = rec.periodo_inicio || '';
+      document.getElementById('edit-modal-fin').value = rec.periodo_fin || '';
+      document.getElementById('edit-modal-dias').value = rec.dias_cotizados || 30;
+      document.getElementById('edit-modal-dias-rep').value = rec.dias_reportados || rec.dias_cotizados || 30;
+      document.getElementById('edit-modal-ibc').value = rec.ibc || 0;
+      document.getElementById('edit-modal-aportante').value = rec.aportante || '';
+      document.getElementById('edit-modal-motivo').value = rec.motivo_correccion || '';
+
+      const orig = rec.valor_original || rec;
+      document.getElementById('edit-modal-original-summary').innerHTML = `
+        Período: <strong>${escapeHTML(orig.periodo_inicio)}</strong> al <strong>${escapeHTML(orig.periodo_fin)}</strong> |
+        Días: <strong>${orig.dias_cotizados}</strong> |
+        IBC: <strong>$${Number(orig.ibc||0).toLocaleString('es-CO')}</strong> |
+        Aportante: <em>${escapeHTML(orig.aportante||'No especificado')}</em>
+      `;
+
+      document.getElementById('edit-modal-error-box').style.display = 'none';
+      document.getElementById('btn-save-record-edit').disabled = false;
+
+      document.getElementById('edit-record-modal').classList.add('active');
+    }
+
+    function closeEditRecordModal() {
+      document.getElementById('edit-record-modal').classList.remove('active');
+    }
+
+    function validateEditModalInputs() {
+      const ini = document.getElementById('edit-modal-inicio').value;
+      const fin = document.getElementById('edit-modal-fin').value;
+      const dias = parseInt(document.getElementById('edit-modal-dias').value, 10);
+      const ibc = parseFloat(document.getElementById('edit-modal-ibc').value);
+      const motivo = document.getElementById('edit-modal-motivo').value.trim();
+      const errBox = document.getElementById('edit-modal-error-box');
+      const btnSave = document.getElementById('btn-save-record-edit');
+
+      let errors = [];
+      if (!ini || !fin) {
+        errors.push("Fechas de inicio y fin son obligatorias.");
+      } else if (ini > fin) {
+        errors.push("Fecha invertida: la fecha de inicio es posterior a la fecha de fin.");
+      } else {
+        const dIni = new Date(ini);
+        const dFin = new Date(fin);
+        const diffDays = Math.round((dFin - dIni) / (1000 * 60 * 60 * 24)) + 1;
+        if (dias > diffDays) {
+          errors.push(`Días cotizados (${dias}) incompatibles: exceden los ${diffDays} días calendario del período.`);
+        }
+      }
+
+      if (isNaN(dias) || dias < 0) {
+        errors.push("Los días no pueden ser negativos.");
+      }
+      if (isNaN(ibc) || ibc < 0) {
+        errors.push("El IBC no puede ser negativo.");
+      }
+      if (!motivo) {
+        errors.push("El motivo de la corrección es obligatorio para garantizar la trazabilidad de auditoría.");
+      }
+
+      if (errors.length > 0) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `<strong>Inconsistencias detectadas:</strong><br>${errors.join('<br>')}`;
+        btnSave.disabled = true;
+      } else {
+        errBox.style.display = 'none';
+        btnSave.disabled = false;
+      }
+    }
+
+    async function saveRecordEdit() {
+      const recordId = document.getElementById('edit-modal-record-id').value;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      const ini = document.getElementById('edit-modal-inicio').value;
+      const fin = document.getElementById('edit-modal-fin').value;
+      const dias = parseInt(document.getElementById('edit-modal-dias').value, 10);
+      const diasRep = parseInt(document.getElementById('edit-modal-dias-rep').value, 10) || dias;
+      const ibc = parseFloat(document.getElementById('edit-modal-ibc').value) || 0;
+      const aportante = document.getElementById('edit-modal-aportante').value.trim();
+      const motivo = document.getElementById('edit-modal-motivo').value.trim();
+
+      if (!motivo) {
+        alert("Por favor indique el motivo de la corrección.");
+        return;
+      }
+
+      // Preserve original if not already preserved
+      if (!rec.valor_original) {
+        rec.valor_original = {
+          periodo_inicio: rec.periodo_inicio,
+          periodo_fin: rec.periodo_fin,
+          dias_cotizados: rec.dias_cotizados,
+          dias_reportados: rec.dias_reportados,
+          ibc: rec.ibc,
+          aportante: rec.aportante
+        };
+      }
+
+      const prevSummary = `${rec.periodo_inicio} a ${rec.periodo_fin}, ${rec.dias_cotizados} días, $${rec.ibc}`;
+      rec.periodo_inicio = ini;
+      rec.periodo_fin = fin;
+      rec.dias_cotizados = dias;
+      rec.dias_reportados = diasRep;
+      rec.ibc = ibc;
+      rec.aportante = aportante;
+      rec.origen = 'CORRECCION_MANUAL';
+      rec.motivo_correccion = motivo;
+      rec.estado_validacion = 'CORREGIDO';
+
+      closeEditRecordModal();
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `registro_${recordId}`,
+        prevSummary,
+        `${ini} a ${fin}, ${dias} días, $${ibc}`,
+        motivo,
+        "CORRECCION_MANUAL"
+      );
+    }
+
+    // Modal Exclude Record Logic
+    function openExcludeRecordModal(recordId) {
+      if (!laborHistory || !laborHistory.registros) return;
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      document.getElementById('exclude-modal-record-id').value = recordId;
+      document.getElementById('exclude-modal-record-info').innerHTML = `
+        <strong>Período:</strong> ${escapeHTML(rec.periodo_inicio)} al ${escapeHTML(rec.periodo_fin)}<br>
+        <strong>Días:</strong> ${rec.dias_cotizados} | <strong>IBC:</strong> $${Number(rec.ibc||0).toLocaleString('es-CO')}<br>
+        <strong>Aportante:</strong> ${escapeHTML(rec.aportante||'No especificado')}
+      `;
+      document.getElementById('exclude-modal-motivo').value = '';
+      document.getElementById('exclude-record-modal').classList.add('active');
+    }
+
+    function closeExcludeRecordModal() {
+      document.getElementById('exclude-record-modal').classList.remove('active');
+    }
+
+    async function confirmExcludeRecord() {
+      const recordId = document.getElementById('exclude-modal-record-id').value;
+      const motivo = document.getElementById('exclude-modal-motivo').value.trim();
+      if (!motivo) {
+        alert("Por favor indique el motivo de la exclusión.");
+        return;
+      }
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      rec.excluido_del_calculo = true;
+      rec.motivo_exclusion = motivo;
+      rec.estado_validacion = 'EXCLUIDO';
+
+      closeExcludeRecordModal();
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `exclusion_registro_${recordId}`,
+        "INCLUIDO",
+        "EXCLUIDO",
+        motivo,
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    async function restoreIncludedRecord(recordId) {
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      rec.excluido_del_calculo = false;
+      rec.motivo_exclusion = '';
+      rec.estado_validacion = rec.origen === 'CORRECCION_MANUAL' ? 'CORREGIDO' : 'VALIDO';
+
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `exclusion_registro_${recordId}`,
+        "EXCLUIDO",
+        "INCLUIDO",
+        "Restauración de registro incluido por el usuario",
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    async function restoreRecordToOriginal(recordId) {
+      const rec = laborHistory.registros.find(r => r.record_id === recordId);
+      if (!rec) return;
+
+      let orig = rec.valor_original;
+      if (!orig && laborHistory.original_registros) {
+        orig = laborHistory.original_registros.find(r => r.record_id === recordId);
+      }
+      if (!orig) return;
+
+      rec.periodo_inicio = orig.periodo_inicio;
+      rec.periodo_fin = orig.periodo_fin;
+      rec.dias_cotizados = orig.dias_cotizados;
+      rec.dias_reportados = orig.dias_reportados;
+      rec.ibc = orig.ibc;
+      rec.aportante = orig.aportante;
+      rec.origen = 'EXTRAIDO_PDF';
+      rec.valor_original = null;
+      rec.motivo_correccion = '';
+      rec.estado_validacion = 'VALIDO';
+
+      invalidateDownstreamCalculations();
+      updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `restauracion_${recordId}`,
+        "MODIFICADO",
+        "ORIGINAL_PDF",
+        "Restauración a valores originales del documento",
+        "EXTRAIDO_PDF"
+      );
+    }
+
+    // Add declared period
+    async function addDeclaredPeriod() {
+      const ini = document.getElementById('decl-inicio').value;
+      const fin = document.getElementById('decl-fin').value;
+      const dias = parseInt(document.getElementById('decl-dias').value, 10) || 30;
+      const ibc = parseFloat(document.getElementById('decl-ibc').value) || 0;
+      const aportante = document.getElementById('decl-aportante').value || 'APORTANTE DECLARADO';
+      const motivo = document.getElementById('decl-motivo').value.trim();
+
+      if (!ini || !fin) {
+        alert("Por favor ingrese las fechas de inicio y fin del período declarado.");
+        return;
+      }
+      if (ini > fin) {
+        alert("La fecha de inicio no puede ser posterior a la fecha de fin.");
+        return;
+      }
+      if (ibc <= 0) {
+        alert("Por favor ingrese un IBC mayor a 0 para el período declarado.");
+        return;
+      }
+      if (!motivo) {
+        alert("Por favor ingrese el motivo o justificación del período declarado.");
+        return;
+      }
+
+      const newRec = {
+        record_id: `decl_${Date.now()}`,
+        periodo_inicio: ini,
+        periodo_fin: fin,
+        dias_reportados: dias,
+        dias_cotizados: dias,
+        ibc: ibc,
+        aportante: aportante,
+        origen: 'DECLARACION_USUARIO',
+        motivo_correccion: motivo,
+        excluido_del_calculo: false,
+        estado_validacion: 'DECLARADO',
+        numero_pagina: null
+      };
+
+      if (!laborHistory.registros) laborHistory.registros = [];
+      laborHistory.registros.push(newRec);
+
+      document.getElementById('decl-inicio').value = '';
+      document.getElementById('decl-fin').value = '';
+      document.getElementById('decl-dias').value = '';
+      document.getElementById('decl-ibc').value = '';
+      document.getElementById('decl-aportante').value = '';
+      document.getElementById('decl-motivo').value = '';
+
+      invalidateDownstreamCalculations();
+      await updateReconciliationView();
+      renderDetailTables();
+
+      await registerFieldCorrection(
+        `periodo_declarado_${ini}_${fin}`,
+        null,
+        `${dias} días, IBC $${ibc} COP, ${aportante}`,
+        motivo,
+        "DECLARACION_USUARIO"
+      );
+    }
+
+    // Reconciliation Summary View
+    async function updateReconciliationView() {
+      if (!laborHistory) return;
+
+      try {
+        const resp = await fetch('/api/review/reconcile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(laborHistory)
+        });
+        const recData = await resp.json();
+        if (!resp.ok || typeof recData.permite_continuar !== 'boolean' || !recData.conteo_registros) {
+          throw new Error('No se pudo verificar la conciliación. Revise el servidor y vuelva a intentarlo.');
+        }
+
+        const semPdf = recData.semanas_reconocidas_pdf !== undefined ? recData.semanas_reconocidas_pdf : (recData.semanas_resumen_pdf || laborHistory.semanas_resumen_colpensiones || 0);
+        document.getElementById('recon-kpi-pdf').textContent = Number(semPdf).toFixed(2);
+        const semDet = recData.semanas_recalculadas_detalle !== undefined ? recData.semanas_recalculadas_detalle : (recData.semanas_detalle_recalculadas || 0);
+        document.getElementById('recon-kpi-detalle').textContent = Number(semDet).toFixed(2);
+        const semDecl = recData.semanas_declaradas_adicionales !== undefined ? recData.semanas_declaradas_adicionales : 0;
+        document.getElementById('recon-kpi-declaradas').textContent = Number(semDecl).toFixed(2);
+        const semAct = recData.semanas_totales_activas !== undefined ? recData.semanas_totales_activas : 0;
+        document.getElementById('recon-kpi-activas').textContent = Number(semAct).toFixed(2);
+
+        const banner = document.getElementById('recon-discrepancia-banner');
+        if (banner) {
+          let html = '';
+          const diff = Math.abs(recData.diferencia_detalle_vs_reconocidas !== undefined ? recData.diferencia_detalle_vs_reconocidas : (recData.diferencia_resumen_vs_detalle || 0));
+
+          const discrepancies = recData.errores_bloqueantes || [];
+          if (discrepancies.length > 0) {
+            html += `
+              <div class="alert alert-warning" style="margin-bottom: 0.75rem;">
+                <strong>⚠️ Discrepancias y Asuntos Pendientes Identificados:</strong>
+                <ul style="margin-top: 4px; padding-left: 1.25rem;">
+                  ${discrepancies.map(d => `<li>${escapeHTML(d)}</li>`).join('')}
+                </ul>
+                <div style="font-size: 0.8rem; margin-top: 6px; color: #92400e;">
+                  <strong>Regla de Consistencia:</strong> El motor no resuelve discrepancias eligiendo automáticamente el valor mayor.
+                  Las cotizaciones detalladas del historial sustentan la liquidación mes a mes.
+                </div>
+              </div>
+            `;
+          } else if (diff > 0.05) {
+            html += `
+              <div class="alert alert-info" style="margin-bottom: 0.75rem;">
+                ℹ️ <strong>Diferencia de Conciliación:</strong> Existe una diferencia de <strong>${diff.toFixed(2)} semanas</strong> entre el total consolidado en el resumen del reporte y la suma del detalle mensual.
+                Los cálculos pensionales toman como base los períodos detallados verificables.
+              </div>
+            `;
+          } else {
+            html += `
+              <div class="alert alert-success" style="margin-bottom: 0.75rem;">
+                ✓ <strong>Conciliación Consistente:</strong> El total de semanas del resumen coincide con la relación detallada de cotizaciones.
+              </div>
+            `;
+          }
+
+          if (recData.asuntos_pendientes && recData.asuntos_pendientes.length > 0) {
+            html += `
+              <div class="alert alert-info" style="margin-bottom: 0;">
+                <strong>📋 Observaciones de la Historia Laboral:</strong>
+                <ul style="margin-top: 4px; padding-left: 1.25rem;">
+                  ${recData.asuntos_pendientes.map(a => `<li>${escapeHTML(a)}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          banner.innerHTML = html;
+        }
+
+      } catch (err) {
+        console.warn("Error en conciliación:", err);
+        document.getElementById('recon-discrepancia-banner').innerHTML =
+          '<div class="alert alert-warning">No se pudo verificar la conciliación. No hay un resultado válido; revise el servidor y vuelva a intentarlo.</div>';
+      }
+    }
+
+    // Confirm Periods and Evaluate Transition
+    async function confirmPeriodsAndEvaluateTransition() {
+      const errBox = document.getElementById('review-validation-errors-box');
+      errBox.style.display = 'none';
+
+      // 1. Save revision and validate on backend
+      try {
+        const revResp = await fetch('/api/review/save-revision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            historia: laborHistory,
+            motivo: "Confirmación en pantalla de revisión de períodos y semanas"
+          })
+        });
+        const revData = await revResp.json();
+
+        if (!revData.success) {
+          errBox.style.display = 'block';
+          errBox.innerHTML = `
+            <strong>⛔ Existen bloqueos que impiden continuar con la simulación:</strong>
+            <ul style="margin-top: 6px; padding-left: 1.25rem;">
+              ${(revData.blocking_errors || [revData.message]).map(e => `<li>${escapeHTML(e)}</li>`).join('')}
+            </ul>
+            <p style="font-size: 0.8rem; margin-top: 6px;">Por favor corrija o excluya los períodos incompatibles antes de evaluar el régimen de transición.</p>
+          `;
+          window.scrollTo({ top: errBox.offsetTop - 50, behavior: 'smooth' });
+          return;
+        }
+
+        // Apply normalized history returned by backend
+        laborHistory = revData.historia;
+
+        // 2. Evaluate Transition
+        const q = currentExecutionId ? `?execution_id=${currentExecutionId}` : '';
+        const evalResp = await fetch(`/api/evaluate-transition${q}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(laborHistory)
+        });
+        const evalRes = await evalResp.json();
+
+        renderTransitionResult(evalRes);
+        goToStep(4);
+
+      } catch (err) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `<strong>Error de validación:</strong> ${escapeHTML(err.message)}`;
+      }
+    }
+
+    function renderTransitionResult(ev) {
+      const banner = document.getElementById('transition-result-banner');
+      const btnStep4 = document.getElementById('btn-to-step-4');
+
+      document.getElementById('trans-kpi-umbral').innerText = `${ev.umbral_exigido} sem`;
+      document.getElementById('trans-kpi-acreditadas').innerText = `${ev.semanas_acreditadas_al_corte} sem`;
+      document.getElementById('trans-kpi-corte').innerText = ev.fecha_corte_aplicada;
+
+      if (ev.permite_continuar_simulacion) {
+        banner.className = 'alert alert-success';
+        banner.innerHTML = `<strong>✅ COBIJADO POR EL RÉGIMEN DE TRANSICIÓN:</strong> ${ev.explicacion}`;
+        btnStep4.style.display = 'inline-flex';
+      } else {
+        banner.className = 'alert alert-danger';
+        banner.innerHTML = `<strong>⛔ NO PROCEDE LA SIMULACIÓN DE LEY 100:</strong> ${ev.explicacion}`;
+        btnStep4.style.display = 'none';
+      }
+
+      document.getElementById('trans-legal-notes').innerHTML = `
+        <strong>Fundamento Jurídico:</strong> ${ev.fuente_juridica}.<br>
+        <em>Sentencia C-264 de 2026:</em> La Corte Constitucional difirió la vigencia al 1 de abril de 2027. Las semanas acreditadas con anterioridad amparan la conservación de la Ley 100 de 1993.
+      `;
+    }
+
+    // Multi-Scenario Management
+    function setScenarioMinimums(idx, value) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return;
+      scenarioList[idx].ibc = Math.round(Math.min(25, Math.max(1, amount)) * scenarioBaseSmlmv);
+      renderScenarioCards();
+    }
+
+    function setScenarioIBC(idx, value) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      scenarioList[idx].ibc = Math.round(amount);
+      renderScenarioCards();
+    }
+
+    function renderScenarioCards() {
+      const container = document.getElementById('escenarios-container');
+      container.innerHTML = '';
+
+      scenarioList.forEach((esc, idx) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.background = '#f8fafc';
+        card.style.border = '1px solid var(--border)';
+        card.innerHTML = `
+          <div class="card-title" style="font-size: 1rem;">
+            <span>${esc.nombre}</span>
+            ${scenarioList.length > 1 ? `<button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="removeScenarioCard(${idx})">Eliminar</button>` : ''}
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Nombre del Escenario:</label>
+              <input type="text" class="form-control" value="${esc.nombre}" onchange="scenarioList[${idx}].nombre = this.value">
+            </div>
+            <div class="form-group">
+              <label>IBC Futuro Inicial (COP):</label>
+              <input type="number" class="form-control scenario-ibc" value="${esc.ibc}" step="1" onchange="setScenarioIBC(${idx}, this.value)">
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Entre 1 SMLMV y 25 SMLMV</span>
+            </div>
+            <div class="form-group">
+              <label>Crecimiento Anual Nominal (%):</label>
+              <input type="number" class="form-control" value="${esc.crec}" step="0.1" onchange="scenarioList[${idx}].crec = parseFloat(this.value)||5.0">
+            </div>
+            <div class="form-group">
+              <label>Supuesto de Inflación Anual (%):</label>
+              <input type="number" class="form-control" value="${esc.inf}" step="0.1" onchange="scenarioList[${idx}].inf = parseFloat(this.value)||4.0">
+              <label for="scenario-minimums-${idx}" style="margin-top:1.25rem;">Cantidad de salarios mínimos:</label>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <input id="scenario-minimums-${idx}" class="form-control scenario-minimums" type="number" min="1" max="25" step="0.1"
+                  value="${Number((esc.ibc / scenarioBaseSmlmv).toFixed(6))}" onchange="setScenarioMinimums(${idx}, this.value)">
+                <div style="display:flex; flex-direction:column; gap:0.2rem;">
+                  <button type="button" class="btn btn-outline btn-sm" aria-label="Aumentar un salario mínimo" onclick="setScenarioMinimums(${idx}, scenarioList[${idx}].ibc / scenarioBaseSmlmv + 1)">▲</button>
+                  <button type="button" class="btn btn-outline btn-sm" aria-label="Disminuir un salario mínimo" onclick="setScenarioMinimums(${idx}, scenarioList[${idx}].ibc / scenarioBaseSmlmv - 1)">▼</button>
+                </div>
+              </div>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Base 2026: 1 SMLMV = ${scenarioBaseSmlmv.toLocaleString('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0})}. Convierte el IBC inicial; no fija la mesada.</span>
+            </div>
+            <div class="form-group" style="justify-content: center; grid-column: span 2;">
+              <label style="display:flex; align-items:center; gap:0.6rem;">
+                <input type="checkbox" class="scenario-no-more" ${esc.noMas === true ? 'checked' : ''}
+                  onchange="scenarioList[${idx}].noMas = this.checked; renderScenarioCards()">
+                No cotizar más
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Conserva los aportes registrados y no agrega semanas futuras. Si faltan semanas, muestra el déficit sin liquidar una mesada. El IBC futuro no se utiliza.</span>
+              <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
+                <input type="checkbox" class="scenario-stop-minimum" ${esc.noMas === true ? 'disabled' : ''} ${esc.hastaMinimo !== false ? 'checked' : ''}
+                  onchange="scenarioList[${idx}].hastaMinimo = this.checked">
+                Aportar hasta completar el mínimo requerido
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Al desmarcar, se proyectan aportes hasta la edad de retiro. La edad de retiro no cambia.</span>
+              <label style="display:flex; align-items:center; gap:0.6rem; margin-top:0.7rem;">
+                <input type="checkbox" class="scenario-alternate" ${esc.noMas === true ? 'disabled' : ''} ${esc.alternos === true ? 'checked' : ''} onchange="scenarioList[${idx}].alternos = this.checked">
+                Cotizar un año sí y un año no
+              </label>
+              <label style="display:flex; align-items:center; gap:0.6rem;">
+                <input type="checkbox" class="scenario-latest" ${esc.noMas === true ? 'disabled' : ''} ${esc.ultimos === true ? 'checked' : ''} onchange="scenarioList[${idx}].ultimos = this.checked">
+                Cotizar los últimos años hasta completar las semanas requeridas
+              </label>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Últimos años: espera y concentra los aportes al final; conserva tu historia laboral. Si marcas ambas, usa los últimos días del calendario alterno. El crecimiento del IBC sigue desde el año base del escenario, incluso durante las pausas.</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function addScenarioCard() {
+      const num = scenarioList.length + 1;
+      scenarioList.push({
+        id: `esc_${Date.now()}`,
+        nombre: `Escenario ${num}`,
+        ibc: Math.min(25, num) * scenarioBaseSmlmv,
+        crec: 5.0,
+        inf: 4.0,
+        smlmv: 5.5,
+        pausas: []
+      });
+      renderScenarioCards();
+    }
+
+    function removeScenarioCard(idx) {
+      if (scenarioList.length <= 1) return;
+      scenarioList.splice(idx, 1);
+      renderScenarioCards();
+    }
+
+    async function runSimulation() {
+      const payload = {
+        execution_id: currentExecutionId,
+        historia: laborHistory,
+        escenarios: scenarioList.map(esc => ({
+          escenario_id: esc.id,
+          nombre: esc.nombre,
+          ibc_futuro_inicial: esc.ibc,
+          fecha_inicio_ibc: "2026-01-01",
+          aportar_hasta_minimo: esc.hastaMinimo !== false,
+          cotizar_anos_alternos: esc.alternos === true,
+          cotizar_ultimos_anos: esc.ultimos === true,
+          no_cotizar_mas: esc.noMas === true,
+          crecimiento_anual_nominal: esc.crec / 100.0,
+          periodos_sin_aporte: esc.pausas || [],
+          supuesto_inflacion: esc.inf / 100.0,
+          supuesto_crecimiento_smlmv: (esc.smlmv || 5.5) / 100.0
+        }))
+      };
+
+      try {
+        const resp = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          alert(data.error || "No fue posible realizar la simulación.");
+          return;
+        }
+
+        simulationResults = data.results;
+        currentExecutionId = data.execution_id || currentExecutionId;
+        renderSimulationResults(data.results);
+        goToStep(6);
+      } catch (err) {
+        alert("Error al simular: " + err.message);
+      }
+    }
+
+    function renderSimulationResults(results) {
+      const out = document.getElementById('simulation-output');
+      out.innerHTML = '';
+
+      if (!results || results.length === 0) {
+        out.innerHTML = '<div class="alert alert-warning">No se generaron resultados de simulación.</div>';
+        return;
+      }
+
+      // 1. Comparison Summary Card (if multiple scenarios)
+      if (results.length > 1) {
+        const compCard = document.createElement('div');
+        compCard.className = 'card';
+        compCard.innerHTML = `
+          <div class="card-title">Comparativa de Escenarios a la Edad Legal de Retiro</div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Escenario</th>
+                  <th>Horizonte</th>
+                  <th>Semanas Totales</th>
+                  <th>IBL Liquidado</th>
+                  <th>Tasa Reemplazo</th>
+                  <th>Mesada Bruta</th>
+                  <th>Descuentos</th>
+                  <th>Mesada Neta</th>
+                  <th>Poder Real (2026)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${results.map(r => `
+                  <tr>
+                    <td><strong>${r.escenario_nombre}</strong></td>
+                    <td>${r.fecha_cumplimiento_edad_legal} (${r.edad_legal} años)</td>
+                    <td>${r.semanas_totales_a_la_edad} sem ${r.cumple_semanas ? '✅' : '⛔'}</td>
+                    <td>${r.ibl_final ? '$' + Number(r.ibl_final).toLocaleString('es-CO') : 'N/A'}</td>
+                    <td>${r.tasa_reemplazo_final_pct ? r.tasa_reemplazo_final_pct + '%' : 'N/A'}</td>
+                    <td><strong>${r.mesada_bruta ? '$' + Number(r.mesada_bruta).toLocaleString('es-CO') : 'Bloqueada'}</strong></td>
+                    <td style="color:var(--danger);">${r.descuento_salud_monto ? '-$' + Number((r.descuento_salud_monto||0) + (r.descuento_fsp_monto||0)).toLocaleString('es-CO') : '0'}</td>
+                    <td style="color:var(--success); font-weight:700;">${r.valor_despues_descuentos ? '$' + Number(r.valor_despues_descuentos).toLocaleString('es-CO') : 'N/A'}</td>
+                    <td>${r.valor_real_poder_adquisitivo ? '$' + Number(r.valor_real_poder_adquisitivo).toLocaleString('es-CO') : 'N/A'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+        out.appendChild(compCard);
+      }
+
+      // 2. Individual Cards for each scenario
+      results.forEach(res => {
+        const isDeficit = !res.cumple_semanas;
+        const badgeStatus = isDeficit
+          ? '<span class="badge badge-danger">DÉFICIT PENSIONAL</span>'
+          : (res.mesada_bruta ? '<span class="badge badge-success">CUMPLE REQUISITOS ORDINARIOS</span>' : '<span class="badge badge-warning">BLOQUEADO SIN SALARIOS</span>');
+
+        let mesadaHTML = '';
+        if (isDeficit) {
+          mesadaHTML = `
+            <div class="alert alert-danger" style="margin-top: 1rem;">
+              <strong>Déficit Pensional a la Edad Legal:</strong> Faltan <strong>${res.deficit_semanas} semanas</strong> para reunir el requisito legal de ${res.semanas_exigidas} semanas.<br>
+              <em>Por regla estricta de producto, no se calcula una mesada pagadera ni se proyectan aportes posteriores a la edad legal ordinaria.</em>
+            </div>
+          `;
+        } else if (!res.mesada_bruta) {
+          mesadaHTML = `
+            <div class="alert alert-warning" style="margin-top: 1rem;">
+              <strong>Bloqueo de Liquidación:</strong> ${res.mensaje_advertencia}
+            </div>
+          `;
+        } else {
+          mesadaHTML = `
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-lbl">Mesada Bruta Estimada</div>
+                <div class="kpi-val">$${Number(res.mesada_bruta).toLocaleString('es-CO')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">${res.limite_aplicado !== 'NINGUNO' ? res.limite_aplicado : 'Cálculo de Fórmula'}</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-lbl">Aporte a Salud (${res.descuento_salud_pct}%)</div>
+                <div class="kpi-val" style="color: var(--danger);">-$${Number(res.descuento_salud_monto).toLocaleString('es-CO')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Descuento obligatorio</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-lbl">Valor Estimado Tras Descuentos</div>
+                <div class="kpi-val" style="color: var(--success);">$${Number(res.valor_despues_descuentos).toLocaleString('es-CO')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Equivale a ${res.equivalente_smlmv} SMLMV</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-lbl">Poder Adquisitivo (Base 2026)</div>
+                <div class="kpi-val" style="color: var(--text);">$${Number(res.valor_real_poder_adquisitivo).toLocaleString('es-CO')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Pesos constantes deflactados</div>
+              </div>
+            </div>
+          `;
+        }
+
+        const resCard = document.createElement('div');
+        resCard.className = 'card';
+        resCard.innerHTML = `
+          <div class="card-title">
+            <span>Resultados: ${res.escenario_nombre}</span>
+            ${badgeStatus}
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-lbl">Horizonte Legal de Edad</div>
+              <div class="kpi-val" style="font-size: 1.15rem;">${res.fecha_cumplimiento_edad_legal}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Edad ordinaria: ${res.edad_legal} años</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Semanas Exigidas</div>
+              <div class="kpi-val">${res.semanas_exigidas}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Año ${res.fecha_cumplimiento_edad_legal.substring(0,4)} (C-197 / L.797)</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Semanas a la Edad</div>
+              <div class="kpi-val">${res.semanas_totales_a_la_edad}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${res.semanas_acreditadas_documentales} doc + ${res.semanas_futuras_proyectadas} fut</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-lbl">Tasa de Reemplazo</div>
+              <div class="kpi-val">${res.tasa_reemplazo_final_pct ? res.tasa_reemplazo_final_pct + '%' : 'N/A'}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Tope legal máx. 80%</div>
+            </div>
+          </div>
+
+          ${mesadaHTML}
+
+          <!-- Desglose paso a paso -->
+          <details>
+            <summary>Explicación Detallada del Cálculo Pensional</summary>
+            <ul>
+              ${(res.desglose_explicativo || []).map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </details>
+        `;
+        out.appendChild(resCard);
+      });
+    }
+
+    // Audit System Modal & Visualization
+    async function openAuditModal() {
+      const modal = document.getElementById('audit-modal');
+      modal.classList.add('active');
+
+      if (!currentExecutionId) {
+        document.getElementById('audit-content-area').innerHTML = '<div class="alert alert-warning">Aún no se ha procesado un documento PDF en esta sesión. Cargue primero un archivo para auditar.</div>';
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/audit/${currentExecutionId}`);
+        if (!resp.ok) throw new Error("No se pudo obtener la auditoría");
+        currentAuditData = await resp.json();
+
+        // Populate scenario filter dropdown
+        const scSelect = document.getElementById('audit-filter-scenario');
+        scSelect.innerHTML = '<option value="ALL">Todos los escenarios</option>';
+        (currentAuditData.scenarios_audit || []).forEach(sc => {
+          const opt = document.createElement('option');
+          opt.value = sc.scenario_id;
+          opt.textContent = sc.scenario_name;
+          scSelect.appendChild(opt);
+        });
+
+        renderAuditContent();
+      } catch (err) {
+        document.getElementById('audit-content-area').innerHTML = `<div class="alert alert-danger">Error cargando auditoría: ${err.message}</div>`;
+      }
+    }
+
+    function closeAuditModal() {
+      document.getElementById('audit-modal').classList.remove('active');
+    }
+
+    function renderAuditContent() {
+      if (!currentAuditData) return;
+      const area = document.getElementById('audit-content-area');
+      const stepFilter = document.getElementById('audit-filter-step').value;
+      const scenarioFilter = document.getElementById('audit-filter-scenario').value;
+      const query = (document.getElementById('audit-search-text').value || '').toLowerCase();
+
+      let html = '';
+
+      // Section 1: Qué extrajo del PDF
+      if (stepFilter === 'ALL' || stepFilter === 'EXTRACCION') {
+        html += `
+          <div class="card" style="margin-bottom: 1rem; border-left: 4px solid var(--primary);">
+            <div class="card-title" style="font-size: 1rem;">1. Qué Extrajo del PDF (Trazabilidad de Extracción)</div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+              Extracción digital directa u OCR local. Huella SHA256: <code>${escapeHTML((currentAuditData.document_sha256||'').substring(0, 16))}...</code> | Estado: <strong>${escapeHTML(currentAuditData.extraction_status)}</strong>
+            </p>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr><th>Pág.</th><th>Método</th><th>Caracteres</th><th>Fragmentos</th><th>Líneas no interpretadas</th></tr>
+                </thead>
+                <tbody>
+                  ${(currentAuditData.pages_audit || []).map(p => `
+                    <tr>
+                      <td>${escapeHTML(p.page_number)}</td>
+                      <td><span class="badge ${p.method === 'OCR_LOCAL' ? 'badge-warning' : 'badge-success'}">${escapeHTML(p.method)}</span></td>
+                      <td>${escapeHTML(p.text_length)}</td>
+                      <td>${escapeHTML(p.fragments_detected)}</td>
+                      <td>${p.uninterpreted_lines.length > 0 ? escapeHTML(p.uninterpreted_lines.length) + ' detectadas' : '0 (Lectura completa)'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            <div style="margin-top: 0.75rem; font-size: 0.8rem;">
+              <strong>Campos Clave Verificados:</strong>
+              <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+                ${(currentAuditData.detected_fields || []).map(f => `
+                  <span class="badge badge-info">${escapeHTML(f.field_name)}: ${escapeHTML(f.parsed_value)}</span>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Section 2: Qué transformó
+      if (stepFilter === 'ALL' || stepFilter === 'TRANSFORMACION') {
+        html += `
+          <div class="card" style="margin-bottom: 1rem; border-left: 4px solid var(--secondary);">
+            <div class="card-title" style="font-size: 1rem;">2. Qué Transformó (Reglas de Normalización y Saneamiento)</div>
+            <ul style="font-size: 0.85rem; padding-left: 1.25rem; line-height: 1.6;">
+              <li><strong>Saneamiento XSS y Caracteres de Control:</strong> Aportantes y nombres limpiados de caracteres no imprimibles y renderizados con <code>textContent</code> seguro (Finding 2.9).</li>
+              <li><strong>Cómputo de Semanas Calendario (SL138-2024):</strong> Los períodos parciales computan <code>min(días_cotizados, días_calendario)</code> para no sobreestimar semanas (Finding 2.4).</li>
+              <li><strong>Unificación de Empleadores Simultáneos:</strong> Aportes en el mismo mes calendario unifican sus IBCs hasta el tope de 25 SMLMV para un máximo de 30 días efectivos (Finding 2.7).</li>
+              <li><strong>Exclusión de Cotizaciones Post-Horizonte:</strong> Si la edad legal se cumplió en el pasado, se excluyen aportes posteriores de la liquidación de dicho horizonte (Finding 2.8).</li>
+            </ul>
+            ${currentAuditData.documentary_discrepancies && currentAuditData.documentary_discrepancies.length > 0 ? `
+              <div class="alert alert-warning" style="margin-top: 0.75rem; font-size: 0.8rem;">
+                <strong>Discrepancias Documentales Reportadas:</strong>
+                <ul>${currentAuditData.documentary_discrepancies.map(d => `<li>${escapeHTML(d)}</li>`).join('')}</ul>
+              </div>
+            ` : '<p style="font-size:0.8rem; color:var(--success); margin-top:0.5rem;">✓ Sin inconsistencias documentales críticas.</p>'}
+          </div>
+        `;
+      }
+
+      // Section 3 & 4: Qué calculó y Diagnóstico / Bloqueos
+      if (stepFilter === 'ALL' || stepFilter === 'CALCULO' || stepFilter === 'DIAGNOSTICO') {
+        const filteredScenarios = (currentAuditData.scenarios_audit || []).filter(sc => {
+          if (scenarioFilter !== 'ALL' && sc.scenario_id !== scenarioFilter) return false;
+          if (query && !JSON.stringify(sc).toLowerCase().includes(query)) return false;
+          return true;
+        });
+
+        html += `
+          <div class="card" style="margin-bottom: 1rem; border-left: 4px solid var(--accent);">
+            <div class="card-title" style="font-size: 1rem;">3. Qué Calculó y 4. Diagnóstico / Bloqueos por Escenario</div>
+            ${filteredScenarios.length === 0 ? '<p style="font-size:0.85rem; color:var(--text-muted);">No hay escenarios calculados que coincidan con el filtro.</p>' : ''}
+            ${filteredScenarios.map(sc => `
+              <div style="border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.85rem; background: #fff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.5rem;">
+                  <strong style="color:var(--primary); font-size:0.95rem;">${escapeHTML(sc.scenario_name)}</strong>
+                  <span class="badge ${sc.is_blocked ? 'badge-danger' : 'badge-success'}">${sc.is_blocked ? 'BLOQUEADO: ' + escapeHTML(sc.blocking_reason) : 'LIQUIDADO'}</span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px; font-size:0.8rem; margin-bottom:0.5rem;">
+                  <div><strong>Horizonte:</strong> ${escapeHTML(sc.fixed_horizon_date)} (${escapeHTML(sc.legal_retirement_age)} años)</div>
+                  <div><strong>Semanas Proyectadas:</strong> ${escapeHTML(sc.weeks_breakdown.proyectadas || 0)} sem</div>
+                  <div><strong>Total a la Edad:</strong> ${escapeHTML(sc.weeks_breakdown.totales || 0)} sem</div>
+                  <div><strong>Método IBL:</strong> ${escapeHTML(sc.ibl_method_chosen)}</div>
+                  <div><strong>IBL Final:</strong> ${sc.ibl_final ? '$' + Number(sc.ibl_final).toLocaleString('es-CO') : 'No liquidable'}</div>
+                  <div><strong>Tasa Reemplazo:</strong> ${sc.replacement_rate_final_pct ? escapeHTML(sc.replacement_rate_final_pct) + '%' : 'N/A'}</div>
+                </div>
+                <details>
+                  <summary style="font-size:0.8rem;">Ver Operaciones Paso a Paso de este Escenario</summary>
+                  <ul style="font-size:0.75rem; margin-top:4px;">
+                    ${(sc.step_by_step_operations || []).map(op => `<li>${escapeHTML(op)}</li>`).join('')}
+                  </ul>
+                </details>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      area.innerHTML = html;
+    }
+
+    async function saveAuditLocally() {
+      if (!currentExecutionId) return;
+      const statusLbl = document.getElementById('audit-disk-status');
+      statusLbl.innerText = "Guardando en disco...";
+
+      try {
+        const resp = await fetch(`/api/audit/${currentExecutionId}/save-local`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enable_sensitive_save: true })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          statusLbl.innerHTML = `✅ Guardado en <code>${data.file_path}</code>`;
+        } else {
+          statusLbl.innerText = "Error: " + (data.message || "No se pudo guardar.");
+        }
+      } catch (err) {
+        statusLbl.innerText = "Error al guardar: " + err.message;
+      }
+    }
+
+    function downloadAuditReportMD() {
+      if (!currentExecutionId) return;
+      window.open(`/api/audit/${currentExecutionId}/report.md`, '_blank');
+    }
+
+    function exportFullAuditJSON() {
+      if (!currentExecutionId) return;
+      window.open(`/api/audit/${currentExecutionId}/export`, '_blank');
+    }
+
+    async function openCatalogModal() {
+      const modal = document.getElementById('catalog-modal');
+      modal.classList.add('active');
+      const box = document.getElementById('catalog-content');
+
+      try {
+        const resp = await fetch('/api/catalog');
+        const data = await resp.json();
+        box.innerHTML = data.rules.map(r => `
+          <div style="border-bottom: 1px solid var(--border); padding: 0.75rem 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:var(--primary); font-size:0.95rem;">${r.norma} - ${r.articulo_o_sentencia}</strong>
+              <span class="badge badge-success">${r.estado}</span>
+            </div>
+            <p style="font-size:0.85rem; margin: 4px 0;">${r.interpretacion_implementada}</p>
+            <div style="font-size:0.75rem; color:var(--text-muted);">
+              <strong>Fuente oficial:</strong> <a href="${r.url_oficial}" target="_blank" rel="noopener">${r.url_oficial}</a> | 
+              <strong>Consultada:</strong> ${r.fecha_consulta}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        box.innerHTML = `<div class="alert alert-danger">Error al cargar catálogo: ${err.message}</div>`;
+      }
+    }
+
+    function closeCatalogModal() {
+      document.getElementById('catalog-modal').classList.remove('active');
+    }
+
+    function openResetSessionModal() {
+      const chk = document.getElementById('chk-delete-disk-audit');
+      if (chk) chk.checked = false;
+      document.getElementById('reset-session-modal').classList.add('active');
+    }
+
+    function closeResetSessionModal() {
+      document.getElementById('reset-session-modal').classList.remove('active');
+    }
+
+    async function executeResetSession() {
+      const chk = document.getElementById('chk-delete-disk-audit');
+      const deleteDisk = chk ? chk.checked : false;
+      closeResetSessionModal();
+
+      try {
+        await fetch(`/api/reset-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            execution_id: currentExecutionId,
+            delete_persisted_audit: deleteDisk
+          })
+        });
+      } catch (err) {
+        console.warn("Error enviando reset-session:", err);
+      }
+
+      // Complete purge of active memory state
+      laborHistory = null;
+      lastUploadedFile = null;
+      currentExecutionId = null;
+      currentAuditData = null;
+      originalExtractedHistory = null;
+      simulationResults = [];
+
+      // Complete DOM clean-up
+      document.getElementById('rev-fecha-nac').value = '';
+      document.getElementById('rev-fecha-nac-es').innerText = '';
+      document.getElementById('rev-estado-afil').value = 'ACTIVO';
+      document.getElementById('rev-fecha-afil').value = '';
+      document.getElementById('rev-fecha-afil-es').innerText = '';
+      document.getElementById('rev-fecha-corte').value = '';
+      document.getElementById('rev-fecha-corte-es').innerText = '';
+      document.getElementById('rev-fecha-expedicion').value = '';
+      document.getElementById('rev-fecha-expedicion-es').innerText = '';
+      document.getElementById('rev-semanas-resumen').value = '';
+      document.getElementById('rev-ultimo-periodo').value = '';
+      document.getElementById('rev-ultimo-periodo-es').innerText = '';
+      document.getElementById('rev-sexo').value = '';
+      document.getElementById('rev-alto-riesgo').value = '';
+      document.getElementById('rev-aportes-posteriores').value = 'SIN_APORTES';
+      document.getElementById('rev-faltantes').value = 'false';
+
+      // Clear all tables
+      const resTbody = document.querySelector('#table-resumen-empleadores tbody');
+      if (resTbody) resTbody.innerHTML = '';
+      const regTbody = document.querySelector('#table-registros tbody');
+      if (regTbody) regTbody.innerHTML = '';
+      const declTbody = document.querySelector('#table-registros-declarados tbody');
+      if (declTbody) declTbody.innerHTML = '';
+      const resSec = document.getElementById('section-resumen-empleador');
+      if (resSec) resSec.style.display = 'none';
+
+      // Clear reconciliation KPIs and banner
+      const kpiPdf = document.getElementById('recon-kpi-pdf'); if (kpiPdf) kpiPdf.textContent = '0.00';
+      const kpiDet = document.getElementById('recon-kpi-detalle'); if (kpiDet) kpiDet.textContent = '0.00';
+      const kpiDec = document.getElementById('recon-kpi-declaradas'); if (kpiDec) kpiDec.textContent = '0.00';
+      const kpiAct = document.getElementById('recon-kpi-activas'); if (kpiAct) kpiAct.textContent = '0.00';
+      const reconBanner = document.getElementById('recon-discrepancia-banner'); if (reconBanner) reconBanner.innerHTML = '';
+      const revErrBox = document.getElementById('review-validation-errors-box'); if (revErrBox) revErrBox.style.display = 'none';
+
+      // Clear scenario and results containers
+      const resContainer = document.getElementById('simulation-output');
+      if (resContainer) resContainer.innerHTML = '';
+
+      goToStep(1);
+      alert(deleteDisk ? "Sesión y auditoría en disco purgadas con éxito." : "Memoria de sesión purgada con éxito (auditoría en disco preservada).");
+    }
+
+    // Keep resetSession for backward compatibility
+    async function resetSession() {
+      openResetSessionModal();
+    }
+
+    function exportResultsJSON() {
+      if (!simulationResults || simulationResults.length === 0) return;
+      const blob = new Blob([JSON.stringify({ laborHistory, simulationResults, audit: currentAuditData }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MiPensionCO_Simulacion_${new Date().toISOString().substring(0,10)}.json`;
+      a.click();
+    }
+  </script>
+
+</body>
+</html>
